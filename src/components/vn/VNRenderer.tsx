@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { VNFrame } from '../../../server/vn/types/vnFrame';
 import type { VNPackage } from '../../../server/vn/types/vnTypes';
+import { t } from '../../lib/i18n';
+import { useLocale } from '../../context/LocaleContext';
 
 function buildDefaultHud(pack: VNPackage, currentSceneId: string) {
   for (const [actIdx, act] of pack.plot.acts.entries()) {
@@ -72,6 +74,7 @@ export function VNRenderer({
   isMuted,
   onToggleMute,
 }: VNRendererProps) {
+  const { locale } = useLocale();
   const [currentIndex, setCurrentIndex] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null!);
 
@@ -275,7 +278,7 @@ export function VNRenderer({
           alignItems: 'center',
           gap: 4,
         }}>
-          <span>DM</span>
+          <span>{t('dm_thinking', locale)}</span>
           {[0, 1, 2].map((i) => (
             <span
               key={i}

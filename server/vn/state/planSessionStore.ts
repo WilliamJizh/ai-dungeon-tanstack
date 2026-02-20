@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 export interface PlanDraftPremise {
   title: string;
   artStyle: string;
+  language: string;
   setting: { world: string; era: string; tone: string };
   premise: string;
   themes: string[];

@@ -9,6 +9,7 @@ export const MOCK_PACK: VNPackage = {
   title: 'Frame Preview',
   genre: 'noir',
   artStyle: 'Dark atmospheric',
+  language: 'en',
   setting: { world: 'Neo-Tokyo', era: '2077', tone: 'noir' },
   characters: [
     { id: 'char_detective', name: 'Detective', role: 'protagonist', description: 'A weary investigator', imagePrompt: '' },

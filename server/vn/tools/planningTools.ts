@@ -28,6 +28,7 @@ function assetDir(packageId: string) {
 const proposeStoryPremiseInput = z.object({
   title: z.string().describe('The title of the visual novel'),
   artStyle: z.string().describe('Art style description, e.g. "cel-shaded anime, dark and moody"'),
+  language: z.string().default('en').describe('BCP-47 language code for all story content: "en" for English, "zh-CN" for Simplified Chinese'),
   setting: z.object({
     world: z.string().describe('World/universe description'),
     era: z.string().describe('Time period or era'),
@@ -293,6 +294,7 @@ export function createPlanningTools(session: PlanSession) {
           title: premise.title,
           genre: premise.themes[0] ?? 'adventure',
           artStyle: premise.artStyle,
+          language: draft.premise?.language ?? 'en',
           setting: premise.setting,
           characters: draft.characters.map(c => ({
             id: c.id,

@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import type { VNFrame } from '../../../../server/vn/types/vnFrame';
 import type { VNPackage } from '../../../../server/vn/types/vnTypes';
 import { resolveAsset } from '../../../lib/resolveAsset';
+import { t } from '../../../lib/i18n';
+import { useLocale } from '../../../context/LocaleContext';
 
 interface InventoryFrameProps {
   frame: VNFrame;
@@ -18,6 +20,7 @@ interface InventoryFrameProps {
  *  - 'select': player picks an item, Enter to confirm
  */
 export function InventoryFrame({ frame, pack, onAdvance, onChoiceSelect }: InventoryFrameProps) {
+  const { locale } = useLocale();
   const inv = frame.inventoryData;
   const items = inv?.items ?? [];
   const mode = inv?.mode ?? 'view';
@@ -130,7 +133,7 @@ export function InventoryFrame({ frame, pack, onAdvance, onChoiceSelect }: Inven
               marginBottom: 4,
             }}
           >
-            [ INVENTORY ]
+            {t('inventory_title', locale)}
           </div>
           {inv?.prompt && (
             <div
@@ -201,7 +204,7 @@ export function InventoryFrame({ frame, pack, onAdvance, onChoiceSelect }: Inven
                             color: '#facc15',
                           }}
                         >
-                          EQ
+                          {t('equipped', locale)}
                         </div>
                       )}
                       {/* Icon */}
@@ -255,7 +258,7 @@ export function InventoryFrame({ frame, pack, onAdvance, onChoiceSelect }: Inven
                   color: 'rgba(255,255,255,.2)',
                 }}
               >
-                INVENTORY EMPTY
+                {t('inventory_empty', locale)}
               </div>
             )}
           </div>
@@ -365,7 +368,7 @@ export function InventoryFrame({ frame, pack, onAdvance, onChoiceSelect }: Inven
               {selected?.name ?? 'ITEM'} selected &mdash; [ENTER] to use &nbsp;&nbsp; [ARROWS] navigate
             </span>
           ) : (
-            <span>[ ESC / CLICK ] CLOSE</span>
+            <span>{t('close_hint', locale)}</span>
           )}
         </div>
       </div>

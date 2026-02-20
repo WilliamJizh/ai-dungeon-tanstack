@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from '@tanstack/react-router';
+import { useLocale } from '../context/LocaleContext';
 import { useScaleManager } from '../hooks/useScaleManager';
 import { FullScreenFrame } from '../components/vn/frames/FullScreenFrame';
 import { DialogueFrame }   from '../components/vn/frames/DialogueFrame';
@@ -14,6 +15,7 @@ import { MOCK_PACK, PREVIEW_GROUPS } from '../lib/mockVNData';
 import type { VNFrame }    from '../../server/vn/types/vnFrame';
 
 export function VNFramePreviewPage() {
+  const { locale, setLocale } = useLocale();
   const [groupIdx,   setGroupIdx]   = useState(0);
   const [variantIdx, setVariantIdx] = useState(0);
 
@@ -185,6 +187,26 @@ export function VNFramePreviewPage() {
           >
             ← VN HOME
           </Link>
+          <button
+            onClick={() => setLocale(locale === 'en' ? 'zh-CN' : 'en')}
+            style={{
+              display: 'block',
+              marginTop: 12,
+              fontSize: 14,
+              letterSpacing: '.2em',
+              color: 'rgba(255,255,255,.5)',
+              background: 'none',
+              border: '1px solid rgba(255,255,255,.15)',
+              borderRadius: 3,
+              padding: '5px 12px',
+              cursor: 'pointer',
+              fontFamily: "VT323, 'Courier New', monospace",
+              width: '100%',
+              textAlign: 'left' as const,
+            }}
+          >
+            {locale === 'en' ? '中文 ZH-CN' : 'ENGLISH EN'}
+          </button>
         </div>
       </div>
 

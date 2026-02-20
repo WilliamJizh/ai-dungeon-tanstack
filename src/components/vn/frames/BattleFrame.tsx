@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import type { VNFrame } from '../../../../server/vn/types/vnFrame';
 import type { VNPackage } from '../../../../server/vn/types/vnTypes';
 import { resolveAsset } from '../../../lib/resolveAsset';
+import { t } from '../../../lib/i18n';
+import { useLocale } from '../../../context/LocaleContext';
 
 interface BattleFrameProps {
   frame: VNFrame;
@@ -21,6 +23,7 @@ interface BattleFrameProps {
  * - Skills: 2x2 grid, active bg rgba(255,255,255,.09)
  */
 export function BattleFrame({ frame, pack, onAdvance, onChoiceSelect }: BattleFrameProps) {
+  const { locale } = useLocale();
   const battle = frame.battle;
   const [activeSkill, setActiveSkill] = useState(0);
   const bg = resolveAsset(frame.panels[0]?.backgroundAsset, pack);
@@ -95,10 +98,10 @@ export function BattleFrame({ frame, pack, onAdvance, onChoiceSelect }: BattleFr
             marginBottom: 5,
           }}
         >
-          [ESC] RETREAT
+          {t('retreat', locale)}
         </div>
         <p style={{ fontSize: 12, letterSpacing: '.1em', color: 'rgba(255,255,255,.22)', paddingLeft: 2 }}>
-          ROUND {battle.round}
+          {t('round_label', locale)} {battle.round}
         </p>
       </div>
 

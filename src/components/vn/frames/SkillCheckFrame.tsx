@@ -2,6 +2,8 @@ import { useEffect } from 'react';
 import type { VNFrame } from '../../../../server/vn/types/vnFrame';
 import type { VNPackage } from '../../../../server/vn/types/vnTypes';
 import { resolveAsset } from '../../../lib/resolveAsset';
+import { t } from '../../../lib/i18n';
+import { useLocale } from '../../../context/LocaleContext';
 
 interface SkillCheckFrameProps {
   frame: VNFrame;
@@ -16,6 +18,7 @@ interface SkillCheckFrameProps {
  * Click / Space to continue.
  */
 export function SkillCheckFrame({ frame, pack, onAdvance }: SkillCheckFrameProps) {
+  const { locale } = useLocale();
   const sc = frame.skillCheck;
   const bg = resolveAsset(frame.panels[0]?.backgroundAsset, pack);
 
@@ -167,7 +170,7 @@ export function SkillCheckFrame({ frame, pack, onAdvance }: SkillCheckFrameProps
             textAlign: 'center',
           }}
         >
-          {sc.stat} CHECK
+          {sc.stat} {t('check_label', locale)}
         </div>
 
         {/* Stat value */}
@@ -246,7 +249,7 @@ export function SkillCheckFrame({ frame, pack, onAdvance }: SkillCheckFrameProps
               color: 'rgba(255,255,255,.45)',
             }}
           >
-            DC {sc.difficulty}
+            {t('dc_label', locale)} {sc.difficulty}
           </span>
           <span
             style={{
@@ -255,7 +258,7 @@ export function SkillCheckFrame({ frame, pack, onAdvance }: SkillCheckFrameProps
               color: resultColor,
             }}
           >
-            RESULT {sc.total}
+            {t('result_label', locale)} {sc.total}
           </span>
         </div>
 
@@ -286,7 +289,7 @@ export function SkillCheckFrame({ frame, pack, onAdvance }: SkillCheckFrameProps
             color: resultColor,
           }}
         >
-          {succeeded ? '\u2713  SUCCESS' : '\u2717  FAILURE'}
+          {succeeded ? `\u2713  ${t('success', locale)}` : `\u2717  ${t('failure', locale)}`}
         </div>
 
         {/* Description */}
@@ -316,7 +319,7 @@ export function SkillCheckFrame({ frame, pack, onAdvance }: SkillCheckFrameProps
             color: 'rgba(255,255,255,.22)',
           }}
         >
-          SPACE / CLICK TO CONTINUE
+          {t('continue_hint', locale)}
         </div>
       </div>
     </div>

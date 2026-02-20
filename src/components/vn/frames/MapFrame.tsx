@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import type { VNFrame } from '../../../../server/vn/types/vnFrame';
 import type { VNPackage } from '../../../../server/vn/types/vnTypes';
 import { resolveAsset } from '../../../lib/resolveAsset';
+import { t } from '../../../lib/i18n';
+import { useLocale } from '../../../context/LocaleContext';
 
 interface MapFrameProps {
   frame: VNFrame;
@@ -18,6 +20,7 @@ interface MapFrameProps {
  * Escape closes the map.
  */
 export function MapFrame({ frame, pack, onAdvance, onChoiceSelect }: MapFrameProps) {
+  const { locale } = useLocale();
   const mapData = frame.mapData;
   const [hoveredLocation, setHoveredLocation] = useState<string | null>(null);
 
@@ -101,7 +104,7 @@ export function MapFrame({ frame, pack, onAdvance, onChoiceSelect }: MapFramePro
             color: 'rgba(255,255,255,.7)',
           }}
         >
-          [ WORLD MAP ]
+          {t('map_title', locale)}
         </div>
       </div>
 
@@ -266,7 +269,7 @@ export function MapFrame({ frame, pack, onAdvance, onChoiceSelect }: MapFramePro
         >
           {hoveredLoc?.description
             ? hoveredLoc.description
-            : 'SELECT A DESTINATION'}
+            : t('select_destination', locale)}
         </div>
         <div
           style={{
@@ -275,7 +278,7 @@ export function MapFrame({ frame, pack, onAdvance, onChoiceSelect }: MapFramePro
             color: 'rgba(255,255,255,.45)',
           }}
         >
-          [ ESC ] CLOSE MAP
+          {t('close_map', locale)}
         </div>
       </div>
 

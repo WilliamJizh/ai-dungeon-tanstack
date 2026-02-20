@@ -68,6 +68,7 @@ export const VNPackageSchema = z.object({
   title: z.string(),
   genre: z.string(),
   artStyle: z.string(),
+  language: z.string().default('en').describe('BCP-47 language tag for all story content, e.g. "en", "zh-CN"'),
   setting: z.object({
     world: z.string(),
     era: z.string(),
@@ -97,6 +98,11 @@ export type Character = z.infer<typeof CharacterSchema>;
 export type SceneDefinition = z.infer<typeof SceneDefinitionSchema>;
 export type Act = z.infer<typeof ActSchema>;
 export type VNPackage = z.infer<typeof VNPackageSchema>;
+
+export const SUPPORTED_LANGUAGES: Record<string, string> = {
+  en: 'English',
+  'zh-CN': '中文（简体）',
+};
 
 /** PlotState tracks the player's narrative position within a session. */
 export interface PlotState {

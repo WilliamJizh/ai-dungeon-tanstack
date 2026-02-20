@@ -46,6 +46,8 @@ function buildDMSystemPrompt(vnPackage: VNPackage, sessionId: string): string {
     .join('\n');
 
   return `You are a visual novel storyteller DM for "${vnPackage.title}".
+LANGUAGE: ${vnPackage.language ?? 'en'}
+ALL generated text — dialogue, narration, character speech, skill check descriptions, choice text, item names, location labels, status effect names — MUST be written in the language above. No mixing. This is a hard requirement.
 SESSION: sessionId="${sessionId}"
 
 SETTING: ${vnPackage.setting.world}, ${vnPackage.setting.era}. Tone: ${vnPackage.setting.tone}.
