@@ -22,6 +22,23 @@ import { DialogueFrame } from './frames/DialogueFrame';
 import { ThreePanelFrame } from './frames/ThreePanelFrame';
 import { ChoiceFrame } from './frames/ChoiceFrame';
 import { BattleFrame } from './frames/BattleFrame';
+import { SkillCheckFrame } from './frames/SkillCheckFrame';
+import { InventoryFrame }  from './frames/InventoryFrame';
+import { MapFrame }        from './frames/MapFrame';
+
+/* ── Pulsing dots CSS (injected once) ────────────────────────────────────── */
+const PULSE_STYLE_ID = 'vn-pulse-dots';
+if (typeof document !== 'undefined' && !document.getElementById(PULSE_STYLE_ID)) {
+  const style = document.createElement('style');
+  style.id = PULSE_STYLE_ID;
+  style.textContent = `
+@keyframes vnPulseDot {
+  0%, 80%, 100% { opacity: 0.15; }
+  40% { opacity: 0.6; }
+}
+`;
+  document.head.appendChild(style);
+}
 
 interface VNRendererProps {
   /** Full accumulated frame list from the agent — grows as new turns complete. */
@@ -58,7 +75,22 @@ export function VNRenderer({
   const [currentIndex, setCurrentIndex] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null!);
 
-  const currentFrame = frames[currentIndex];
+  // Track the last successfully displayed frame so we can hold it on-screen
+  // during loading gaps (player advanced past all frames, waiting for more).
+  const lastFrameRef = useRef<VNFrame | null>(null);
+
+  const currentFrame = frames[currentIndex] ?? null;
+
+  // Keep lastFrameRef up-to-date whenever we have a real frame
+  if (currentFrame) {
+    lastFrameRef.current = currentFrame;
+  }
+
+  // The frame we actually render: prefer current, fall back to last-seen
+  const displayFrame = currentFrame ?? lastFrameRef.current;
+
+  // Are we in an "awaiting" state? (player past all frames, agent still generating)
+  const awaitingNewFrames = !currentFrame && isLoading;
 
   useEffect(() => {
     if (currentFrame) {
@@ -92,35 +124,57 @@ export function VNRenderer({
 
   const handleChoiceSelect = useCallback(
     (choiceId: string) => {
+      setCurrentIndex(frames.length); // advance past current frames → wait until next turn arrives
       onPlayerAction(choiceId);
     },
-    [onPlayerAction],
+    [onPlayerAction, frames.length],
   );
 
   const handleFreeTextSubmit = useCallback(
     (text: string) => {
+      setCurrentIndex(frames.length); // advance past current frames → wait until next turn arrives
       onPlayerAction(text);
     },
-    [onPlayerAction],
+    [onPlayerAction, frames.length],
   );
 
-  if (!currentFrame) {
+  // ── No frame has EVER been displayed — first load, nothing to hold on-screen ──
+  if (!displayFrame) {
     return (
       <div
         style={{
+          position: 'relative',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           width: '100%',
           height: '100%',
           background: '#000',
-          color: 'rgba(255,255,255,.3)',
-          fontFamily: "VT323, 'Courier New', monospace",
-          fontSize: 18,
-          letterSpacing: '.2em',
         }}
       >
-        LOADING...
+        {/* Subtle pulsing dots instead of a hard "LOADING..." */}
+        <div style={{
+          position: 'absolute',
+          bottom: '48%',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          display: 'flex',
+          gap: 8,
+        }}>
+          {[0, 1, 2].map((i) => (
+            <span
+              key={i}
+              style={{
+                display: 'inline-block',
+                width: 6,
+                height: 6,
+                borderRadius: '50%',
+                background: 'rgba(255,255,255,.5)',
+                animation: `vnPulseDot 1.4s ease-in-out ${i * 0.2}s infinite`,
+              }}
+            />
+          ))}
+        </div>
       </div>
     );
   }
@@ -128,7 +182,7 @@ export function VNRenderer({
   const defaultHud = buildDefaultHud(pack, currentSceneId);
 
   const frameProps = {
-    frame: { ...currentFrame, hud: currentFrame.hud ?? defaultHud },
+    frame: { ...displayFrame, hud: displayFrame.hud ?? defaultHud },
     pack,
     onAdvance: handleAdvance,
     onChoiceSelect: handleChoiceSelect,
@@ -138,15 +192,13 @@ export function VNRenderer({
   };
 
   const renderFrame = () => {
-    switch (currentFrame.type) {
+    switch (displayFrame.type) {
       case 'full-screen':
         return <FullScreenFrame {...frameProps} />;
       case 'dialogue':
-        // Storyteller can emit center-target dialogue; fallback to full-screen
-        // when the layout lacks left/right panels.
         if (
-          currentFrame.dialogue?.targetPanel === 'center' ||
-          !currentFrame.panels.some((p) => p.id === 'left' || p.id === 'right')
+          displayFrame.dialogue?.targetPanel === 'center' ||
+          !displayFrame.panels.some((p) => p.id === 'left' || p.id === 'right')
         ) {
           return <FullScreenFrame {...frameProps} />;
         }
@@ -157,6 +209,14 @@ export function VNRenderer({
         return <ChoiceFrame {...frameProps} />;
       case 'battle':
         return <BattleFrame {...frameProps} />;
+      case 'skill-check':
+        return <SkillCheckFrame {...frameProps} />;
+      case 'inventory':
+        return <InventoryFrame {...frameProps} />;
+      case 'map':
+        return <MapFrame {...frameProps} />;
+      case 'character-sheet':
+        return <FullScreenFrame {...frameProps} />;
       case 'transition':
         return <FullScreenFrame {...frameProps} />;
       default:
@@ -170,24 +230,65 @@ export function VNRenderer({
       style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden' }}
     >
       {renderFrame()}
-      <FrameEffects effects={currentFrame.effects ?? []} containerRef={containerRef} />
-      {isLoading && (
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            zIndex: 200,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: 'rgba(0,0,0,.5)',
-            color: 'rgba(255,255,255,.5)',
-            fontFamily: "VT323, 'Courier New', monospace",
-            fontSize: 20,
-            letterSpacing: '.3em',
-          }}
-        >
-          LOADING...
+      <FrameEffects effects={displayFrame.effects ?? []} containerRef={containerRef} />
+
+      {/* FIX 2: Ambient pulsing dots — waiting for first frame of a new turn */}
+      {awaitingNewFrames && (
+        <div style={{
+          position: 'absolute',
+          bottom: 24,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 200,
+          display: 'flex',
+          gap: 6,
+        }}>
+          {[0, 1, 2].map((i) => (
+            <span
+              key={i}
+              style={{
+                display: 'inline-block',
+                width: 5,
+                height: 5,
+                borderRadius: '50%',
+                background: 'rgba(255,255,255,.35)',
+                animation: `vnPulseDot 1.4s ease-in-out ${i * 0.2}s infinite`,
+              }}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* FIX 3: "DM ..." badge — agent is generating and at least one frame has arrived */}
+      {isLoading && currentFrame && (
+        <div style={{
+          position: 'absolute',
+          bottom: 10,
+          right: 12,
+          zIndex: 200,
+          fontFamily: "VT323, 'Courier New', monospace",
+          fontSize: 13,
+          color: 'rgba(255,255,255,.35)',
+          letterSpacing: '.12em',
+          pointerEvents: 'none',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 4,
+        }}>
+          <span>DM</span>
+          {[0, 1, 2].map((i) => (
+            <span
+              key={i}
+              style={{
+                display: 'inline-block',
+                width: 3,
+                height: 3,
+                borderRadius: '50%',
+                background: 'rgba(255,255,255,.35)',
+                animation: `vnPulseDot 1.4s ease-in-out ${i * 0.2}s infinite`,
+              }}
+            />
+          ))}
         </div>
       )}
     </div>

@@ -6,6 +6,9 @@ import { DialogueFrame }   from '../components/vn/frames/DialogueFrame';
 import { ThreePanelFrame } from '../components/vn/frames/ThreePanelFrame';
 import { ChoiceFrame }     from '../components/vn/frames/ChoiceFrame';
 import { BattleFrame }     from '../components/vn/frames/BattleFrame';
+import { SkillCheckFrame } from '../components/vn/frames/SkillCheckFrame';
+import { InventoryFrame }  from '../components/vn/frames/InventoryFrame';
+import { MapFrame }        from '../components/vn/frames/MapFrame';
 import { FrameEffects }    from '../components/vn/FrameEffects';
 import { MOCK_PACK, PREVIEW_GROUPS } from '../lib/mockVNData';
 import type { VNFrame }    from '../../server/vn/types/vnFrame';
@@ -68,6 +71,24 @@ export function VNFramePreviewPage() {
         );
       case 'battle':
         return <BattleFrame {...common} onChoiceSelect={(_id) => handleAdvance()} />;
+      case 'skill-check':
+        return <SkillCheckFrame {...common} />;
+      case 'inventory':
+        return (
+          <InventoryFrame
+            {...common}
+            onChoiceSelect={(_id) => handleAdvance()}
+          />
+        );
+      case 'map':
+        return (
+          <MapFrame
+            {...common}
+            onChoiceSelect={(_id) => handleAdvance()}
+          />
+        );
+      case 'character-sheet':
+        return <FullScreenFrame {...common} />;
       default:
         return <FullScreenFrame {...common} />;
     }

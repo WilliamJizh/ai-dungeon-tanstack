@@ -34,6 +34,8 @@ export const plotStates = sqliteTable('plot_states', {
   completedScenes: text('completed_scenes').notNull().default('[]'),
   /** JSON object of story flags set during gameplay. */
   flagsJson: text('flags_json').notNull().default('{}'),
+  /** JSON-serialised PlayerStats for the session. */
+  playerStatsJson: text('player_stats_json').notNull().default('{}'),
   updatedAt: text('updated_at').notNull(),
 });
 

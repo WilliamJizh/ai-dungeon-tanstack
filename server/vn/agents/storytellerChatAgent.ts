@@ -5,6 +5,7 @@ import { frameBuilderTool } from '../tools/frameBuilderTool.js';
 import { plotStateTool } from '../tools/plotStateTool.js';
 import { sceneCompleteTool } from '../tools/sceneCompleteTool.js';
 import { yieldToPlayerTool } from '../tools/yieldToPlayerTool.js';
+import { playerStatsTool } from '../tools/playerStatsTool.js';
 import type { VNPackage } from '../types/vnTypes.js';
 import type { VNFrame } from '../types/vnFrame.js';
 
@@ -93,7 +94,31 @@ STRICT ASSET RULES:
 - backgroundAsset MUST be one of: ${bgKeys}. Never invent background keys.
 - Active speaker panel: panelWeight=62, dimmed=false. Listener panel: panelWeight=38, dimmed=true.
 - Use effects for drama: shake for impacts, flash for revelations, fade-in for scene opens.
-- Max 5 frames per turn. Call frameBuilderTool once per frame — do NOT batch.`;
+- Max 5 frames per turn. Call frameBuilderTool once per frame — do NOT batch.
+
+INTERACTIVE GAMEPLAY FRAMES (use these to create engaging moments beyond dialogue):
+
+skill-check — Use when the player attempts something risky or uncertain:
+  1. Call playerStatsTool({ action: "read", sessionId: "${sessionId}" }) to get their current stats
+  2. Pick the relevant attribute (strength/dexterity/intelligence/luck/charisma)
+  3. Compute: modifier = Math.floor((attributeValue - 10) / 2), roll = random 1-20, total = roll + modifier
+  4. Set difficulty (DC): easy=8, moderate=12, hard=16, very hard=20
+  5. Build a skill-check frame: type="skill-check", skillCheck: { stat, statValue, difficulty, roll, modifier, total, succeeded: total>=difficulty, description }
+  6. Follow with narrative frames reacting to the outcome (success/failure each lead different directions)
+  7. If HP changes (combat, hazard), call playerStatsTool({ action: "update", sessionId: "${sessionId}", updates: { hp: newHp } })
+
+inventory — Use when player finds an item, opens their pack, or needs to choose an item:
+  - To give an item: call playerStatsTool({ action: "addItem", sessionId: "${sessionId}", item: { id, name, description, icon, quantity:1 } })
+  - To show inventory: build frame type="inventory" with inventoryData from playerStatsTool read result
+  - mode="view" to display, mode="select" when player must choose an item to use
+
+map — Use when the player needs to navigate between locations or the scene calls for travel:
+  - Build frame type="map" with mapData: { backgroundAsset, currentLocationId, locations[] }
+  - Populate locations from the package scenes (each scene is a potential location)
+  - accessible: true for scenes the player can reach now, false for locked/future scenes
+  - visited: true for completedScenes from plotStateTool
+
+GENERAL RULE: Alternate between narrative dialogue frames AND gameplay frames. Do not have more than 3 consecutive pure-narrative frames without adding a skill-check, choice, or interactive moment.`;
 }
 
 // ─── Agent factory (per-request, with sessionId bound in tools/prompt) ────────
@@ -109,6 +134,7 @@ export function createStorytellerAgent(vnPackage: VNPackage, sessionId: string) 
       frameBuilderTool,
       sceneCompleteTool,
       yieldToPlayer: yieldToPlayerTool,
+      playerStatsTool,
     },
     stopWhen: (step: any) =>
       (hasToolCall('yieldToPlayer') as (s: any) => boolean)(step) ||
@@ -160,6 +186,16 @@ const _typeAgent = new ToolLoopAgent({
         waitingFor: z.enum(['choice', 'free-text', 'continue']),
       }),
       execute: async () => ({}),
+    }),
+    playerStatsTool: tool({
+      inputSchema: z.object({
+        action: z.enum(['read', 'update', 'addItem', 'removeItem']),
+        sessionId: z.string(),
+        updates: z.object({}).optional(),
+        item: z.object({}).optional(),
+        itemId: z.string().optional(),
+      }),
+      execute: async () => ({ ok: true as const, stats: {} }),
     }),
   },
 });

@@ -66,3 +66,6 @@ sqlite.exec(`
     content_json TEXT
   );
 `);
+
+// Add player_stats_json column if it doesn't exist (migration)
+try { sqlite.exec(`ALTER TABLE plot_states ADD COLUMN player_stats_json TEXT NOT NULL DEFAULT '{}'`); } catch (_) {}

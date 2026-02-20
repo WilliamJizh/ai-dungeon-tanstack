@@ -305,4 +305,130 @@ export const PREVIEW_GROUPS: PreviewGroup[] = [
       },
     ],
   },
+
+  // ── SKILL CHECK ───────────────────────────────────────────────────────────────
+  {
+    label: 'SKILL CHECK',
+    variants: [
+      {
+        label: 'Success',
+        frame: {
+          id: 'sc-success', type: 'skill-check' as const, hud: HUD,
+          panels: [{ id: 'center' as const, backgroundAsset: 'bg_city' }],
+          skillCheck: {
+            stat: 'intelligence', statValue: 12, difficulty: 10,
+            roll: 7, modifier: 1, total: 8, succeeded: true,
+            description: 'Perception check — spotting the hidden switch behind the bookcase',
+          },
+        },
+      },
+      {
+        label: 'Failure',
+        frame: {
+          id: 'sc-fail', type: 'skill-check' as const, hud: HUD,
+          panels: [{ id: 'center' as const, backgroundAsset: 'bg_fight' }],
+          skillCheck: {
+            stat: 'luck', statValue: 6, difficulty: 14,
+            roll: 3, modifier: -2, total: 1, succeeded: false,
+            description: 'Luck check — attempting to bluff your way past the guard',
+          },
+        },
+      },
+      {
+        label: 'High Roll',
+        frame: {
+          id: 'sc-crit', type: 'skill-check' as const, hud: HUD,
+          panels: [{ id: 'center' as const, backgroundAsset: 'bg_city' }],
+          skillCheck: {
+            stat: 'charisma', statValue: 16, difficulty: 15,
+            roll: 18, modifier: 3, total: 21, succeeded: true,
+            description: 'Persuasion check — convincing the informant to talk',
+          },
+        },
+      },
+    ],
+  },
+
+  // ── INVENTORY ─────────────────────────────────────────────────────────────────
+  {
+    label: 'INVENTORY',
+    variants: [
+      {
+        label: 'View Mode',
+        frame: {
+          id: 'inv-view', type: 'inventory' as const, hud: HUD,
+          panels: [{ id: 'center' as const, backgroundAsset: 'bg_city' }],
+          inventoryData: {
+            mode: 'view' as const,
+            items: [
+              { id: 'badge', name: 'Detective Badge', description: 'Your official badge. Opens some doors that money cannot.', icon: '🔰', quantity: 1, equipped: true },
+              { id: 'revolver', name: 'Revolver', description: '5 rounds remaining. Use with caution.', icon: '🔫', quantity: 1, equipped: false },
+              { id: 'flask', name: 'Whiskey Flask', description: 'Half-empty. Or half-full. Restores 5 HP when used.', icon: '🧪', quantity: 1, effect: '+5 HP on use' },
+              { id: 'note', name: 'Encrypted Note', description: 'A crumpled note with what appear to be coordinates. Undeciphered.', icon: '📝', quantity: 1 },
+              { id: 'key', name: 'Skeleton Key', description: 'Opens basic locks. Acquired from the pawnbroker.', icon: '🗝️', quantity: 1 },
+              { id: 'coins', name: 'Cash', description: 'Enough for a meal, a bribe, or a one-way ticket out.', icon: '💰', quantity: 3 },
+            ],
+          },
+        },
+      },
+      {
+        label: 'Select Mode',
+        frame: {
+          id: 'inv-select', type: 'inventory' as const, hud: HUD,
+          panels: [{ id: 'center' as const, backgroundAsset: 'bg_city' }],
+          inventoryData: {
+            mode: 'select' as const,
+            prompt: 'The lock requires a tool. Choose an item to use:',
+            items: [
+              { id: 'key', name: 'Skeleton Key', description: 'Opens basic locks.', icon: '🗝️', quantity: 1 },
+              { id: 'revolver', name: 'Revolver', description: 'Force it open. Noisy.', icon: '🔫', quantity: 1 },
+              { id: 'badge', name: 'Detective Badge', description: 'Show authority. Might work.', icon: '🔰', quantity: 1 },
+            ],
+          },
+        },
+      },
+    ],
+  },
+
+  // ── MAP ───────────────────────────────────────────────────────────────────────
+  {
+    label: 'MAP',
+    variants: [
+      {
+        label: 'City Map',
+        frame: {
+          id: 'map-city', type: 'map' as const, hud: HUD,
+          panels: [{ id: 'center' as const, backgroundAsset: 'bg_city' }],
+          mapData: {
+            backgroundAsset: 'bg_city',
+            currentLocationId: 'harbor',
+            locations: [
+              { id: 'harbor', label: 'Harbor District', x: 22, y: 68, accessible: true, visited: true, description: 'Where your investigation began.' },
+              { id: 'downtown', label: 'Downtown', x: 52, y: 28, accessible: true, visited: false, description: 'Corporate towers and dirty money.' },
+              { id: 'market', label: 'Night Market', x: 72, y: 55, accessible: true, visited: false, description: 'Information for sale — if you know who to ask.' },
+              { id: 'factory', label: 'Old Factory', x: 80, y: 78, accessible: false, visited: false, description: 'Locked down. Need a warehouse key.' },
+              { id: 'precinct', label: 'Police Precinct', x: 38, y: 44, accessible: true, visited: false, description: 'Your old colleagues. Not all friendly.' },
+            ],
+          },
+        },
+      },
+      {
+        label: 'Station Map',
+        frame: {
+          id: 'map-station', type: 'map' as const, hud: HUD2,
+          panels: [{ id: 'center' as const, backgroundAsset: 'bg_hangar' }],
+          mapData: {
+            backgroundAsset: 'bg_hangar',
+            currentLocationId: 'hangar',
+            locations: [
+              { id: 'hangar', label: 'Hangar Bay', x: 50, y: 72, accessible: true, visited: true },
+              { id: 'bridge', label: 'Bridge', x: 50, y: 20, accessible: true, visited: false },
+              { id: 'medbay', label: 'Med Bay', x: 22, y: 45, accessible: true, visited: true, description: 'Elara is here.' },
+              { id: 'cargo', label: 'Cargo Hold', x: 78, y: 45, accessible: false, visited: false, description: 'Sealed — power failure.' },
+            ],
+          },
+        },
+      },
+    ],
+  },
 ];

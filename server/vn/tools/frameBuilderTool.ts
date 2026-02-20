@@ -18,7 +18,7 @@ const LegacyPanelSchema = z.object({
 
 const LegacyFrameSchema = z.object({
   id: z.string(),
-  type: z.enum(['full-screen', 'dialogue', 'three-panel', 'choice', 'battle', 'transition']),
+  type: z.enum(['full-screen', 'dialogue', 'three-panel', 'choice', 'battle', 'transition', 'skill-check', 'inventory', 'map', 'character-sheet']),
   panels: z.array(LegacyPanelSchema).optional(),
   dialogue: z.object({
     speaker: z.string().optional(),
@@ -61,6 +61,10 @@ const LegacyFrameSchema = z.object({
   }).optional(),
   battle: z.any().optional(),
   transition: z.any().optional(),
+  skillCheck: z.any().optional(),
+  inventoryData: z.any().optional(),
+  mapData: z.any().optional(),
+  characterSheet: z.any().optional(),
 }).passthrough();
 
 const FrameToolInputSchema = z.union([
@@ -142,6 +146,10 @@ function normalizeLegacyFrame(frame: z.infer<typeof LegacyFrameSchema>): z.infer
     effects: normalizeEffects(frame.effects),
     audio: frame.audio ?? (frame.music ? { musicAsset: frame.music } : undefined),
     transition: frame.transition,
+    skillCheck: frame.skillCheck,
+    inventoryData: frame.inventoryData,
+    mapData: frame.mapData,
+    characterSheet: frame.characterSheet,
   };
 
   if (

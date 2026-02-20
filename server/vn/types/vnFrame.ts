@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /** The layout type of a VN frame, determines which React component renders it. */
-export const FrameTypeSchema = z.enum(['full-screen', 'dialogue', 'three-panel', 'choice', 'battle', 'transition']);
+export const FrameTypeSchema = z.enum(['full-screen', 'dialogue', 'three-panel', 'choice', 'battle', 'transition', 'skill-check', 'inventory', 'map', 'character-sheet']);
 export type FrameType = z.infer<typeof FrameTypeSchema>;
 
 /** Visual effects applied to a frame or panel. Auto-cleared after durationMs. */
@@ -102,6 +102,61 @@ export const VNFrameSchema = z.object({
     type: z.enum(['crossfade', 'wipe-right', 'black-cut']),
     durationMs: z.number(),
     titleCard: z.string().optional(),
+  }).optional(),
+  /** Skill check / dice roll data — for type='skill-check'. */
+  skillCheck: z.object({
+    stat: z.string().describe('Attribute used, e.g. "intelligence", "luck"'),
+    statValue: z.number().describe('Current attribute score'),
+    difficulty: z.number().describe('Difficulty Class (DC) to beat'),
+    roll: z.number().describe('Raw dice roll result (1-20)'),
+    modifier: z.number().optional().describe('Attribute modifier = floor((statValue-10)/2)'),
+    total: z.number().describe('Final result = roll + modifier'),
+    succeeded: z.boolean().describe('true if total >= difficulty'),
+    description: z.string().describe('What the check was for, e.g. "Perception check — spot the hidden door"'),
+  }).optional(),
+  /** Inventory display — for type='inventory'. */
+  inventoryData: z.object({
+    items: z.array(z.object({
+      id: z.string(),
+      name: z.string(),
+      description: z.string(),
+      icon: z.string().describe('Emoji or short icon text'),
+      quantity: z.number(),
+      equipped: z.boolean().optional(),
+      effect: z.string().optional().describe('Game effect description'),
+    })),
+    mode: z.enum(['view', 'select']).describe('view=display only, select=player picks an item'),
+    prompt: z.string().optional().describe('Instruction shown in select mode'),
+  }).optional(),
+  /** Location map — for type='map'. */
+  mapData: z.object({
+    backgroundAsset: z.string().describe('Asset key for map background image'),
+    currentLocationId: z.string().describe('ID of where player currently is'),
+    locations: z.array(z.object({
+      id: z.string(),
+      label: z.string(),
+      x: z.number().describe('Horizontal position 0-100 as % of frame width'),
+      y: z.number().describe('Vertical position 0-100 as % of frame height'),
+      accessible: z.boolean(),
+      visited: z.boolean().optional(),
+      description: z.string().optional(),
+    })),
+  }).optional(),
+  /** Full character sheet — for type='character-sheet'. */
+  characterSheet: z.object({
+    playerName: z.string(),
+    level: z.number(),
+    hp: z.number(),
+    maxHp: z.number(),
+    attributes: z.record(z.string(), z.number()).optional(),
+    skills: z.array(z.string()).optional(),
+    statusEffects: z.array(z.object({
+      id: z.string(),
+      name: z.string(),
+      type: z.enum(['buff', 'debuff', 'neutral']),
+      description: z.string(),
+      icon: z.string().optional(),
+    })).optional(),
   }).optional(),
   /**
    * Internal metadata used by agents to track narrative position.
