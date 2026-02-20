@@ -26,7 +26,7 @@ export interface AgentCallResult {
 /**
  * runAgent: sends a prompt+system to Gemini, returns raw text + timing.
  * Inspired by Mastra's workflowLoopStream — single structured-output LLM call.
- * Model: gemini-1.5-flash, responseMimeType: application/json
+ * Model: gemini-3-flash-preview, responseMimeType: application/json
  */
 export async function runAgent(
   options: AgentCallOptions,
@@ -35,7 +35,7 @@ export async function runAgent(
   const genAI = getGenAI()
 
   const model = genAI.getGenerativeModel({
-    model: 'gemini-1.5-flash',
+    model: 'gemini-3-flash-preview',
     systemInstruction,
     generationConfig: {
       responseMimeType: 'application/json',

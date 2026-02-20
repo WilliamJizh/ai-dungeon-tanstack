@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Visual Novel System — Design Reference</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+  <script src="https://mcp.figma.com/mcp/html-to-design/capture.js" async></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root { --px: 'VT323','Courier New',monospace; }
+
+    body {
+      background: #050505;
+      color: #fff;
+      font-family: var(--px);
+      padding: 56px 52px;
+    }
+
+    /* ── Doc header ── */
+    .doc-hd { text-align:center; margin-bottom:72px; }
+    .doc-hd .ey { display:inline-flex; align-items:center; gap:12px; margin-bottom:14px; }
+    .doc-hd .ey span { font-size:12px; letter-spacing:.5em; text-transform:uppercase; color:rgba(255,255,255,.28); }
+    .doc-hd h1 { font-size:44px; letter-spacing:.28em; text-transform:uppercase; margin-bottom:8px; }
+    .doc-hd .sub { font-size:13px; letter-spacing:.44em; text-transform:uppercase; color:rgba(255,255,255,.35); }
+    .di  { width:10px; height:10px; background:#fff; transform:rotate(45deg); opacity:.4; flex-shrink:0; }
+    .dio { width:9px;  height:9px;  border:1.5px solid rgba(255,255,255,.2); transform:rotate(45deg); flex-shrink:0; }
+
+    /* ── Section ── */
+    .sec { margin-bottom:72px; }
+    .sec-lbl  { font-size:11px; letter-spacing:.44em; text-transform:uppercase; color:rgba(255,255,255,.52); margin-bottom:10px; padding-left:14px; border-left:2px solid rgba(255,255,255,.25); }
+    .sec-note { font-size:11px; letter-spacing:.28em; text-transform:uppercase; color:rgba(255,255,255,.72); margin-bottom:16px; display:flex; gap:16px; align-items:center; }
+    .tag { background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.18); padding:2px 10px; font-size:10px; color:rgba(255,255,255,.85); }
+
+    /* ── Frame — 16:9 ── */
+    .frame { position:relative; overflow:hidden; background:#000; }
+    .f169  { width:1144px; height:644px; }
+
+    /* Panel */
+    .panel { position:relative; overflow:hidden; border-radius:6px; }
+    .pbg { position:absolute; inset:0; background-size:cover; background-position:center; }
+    .pov { position:absolute; inset:0; }
+
+    /* HUD — no border-bottom */
+    .hud {
+      display:flex; align-items:center; justify-content:space-between;
+      padding:0 20px; height:48px; position:relative;
+    }
+    .hud-ch  { font-size:13px; letter-spacing:.1em; color:rgba(255,255,255,.38); line-height:1.4; }
+    .hud-ch small { font-size:11px; display:block; color:rgba(255,255,255,.2); }
+    .hud-ctr { position:absolute; left:50%; transform:translateX(-50%); font-size:13px; letter-spacing:.22em; color:rgba(255,255,255,.2); }
+    .hud-nav { display:flex; gap:20px; }
+    .hud-nav span { font-size:11px; letter-spacing:.1em; color:rgba(255,255,255,.16); }
+
+    /* Character */
+    .char { position:absolute; bottom:0; left:50%; transform:translateX(-50%); object-fit:contain; object-position:bottom; }
+
+    /* ── Text container (shared) ── name inside, radius:4 ── */
+    .box {
+      background:rgba(0,0,0,.68);
+      border:1px solid rgba(255,255,255,.12);
+      border-radius:4px;
+      padding:10px 16px;
+    }
+    .box-name {
+      font-size:11px; letter-spacing:.22em; text-transform:uppercase;
+      color:rgba(255,198,70,.9); margin-bottom:6px;
+    }
+    .box-name.narrator { color:rgba(140,210,255,.7); }
+    .box-text { font-size:18px; line-height:1.5; color:rgba(255,255,255,.9); letter-spacing:.02em; }
+
+    /* Narration variant */
+    .box-narr {
+      background:rgba(0,0,0,.65);
+      border:1px solid rgba(255,255,255,.08);
+      border-radius:4px;
+      padding:10px 22px;
+      text-align:center;
+    }
+    .box-narr .box-name { text-align:left; }
+    .box-narr .box-text { font-size:18px; line-height:1.68; color:rgba(255,255,255,.68); letter-spacing:.04em; }
+
+    /* Choice buttons */
+    .choices { position:absolute; z-index:10; display:flex; flex-direction:column; gap:4px; }
+    .choice {
+      background:rgba(0,0,0,.68); border:1px solid rgba(255,255,255,.1);
+      border-radius:4px; padding:9px 16px;
+      font-size:16px; letter-spacing:.08em; color:rgba(255,255,255,.8);
+      font-family:var(--px); text-align:left;
+    }
+    .choice.sel { background:rgba(255,255,255,.1); border-color:rgba(255,255,255,.28); color:#fff; }
+
+    /* Controls bar — no border-top */
+    .ctrl {
+      display:flex; align-items:center; justify-content:center;
+      height:52px; padding:0 20px;
+    }
+    .space-btn {
+      background:none; border:1px solid rgba(255,255,255,.1); border-radius:3px;
+      padding:5px 14px; font-size:13px; letter-spacing:.12em;
+      color:rgba(255,255,255,.28); font-family:var(--px);
+    }
+    .input-row {
+      display:flex; width:44%; max-width:500px;
+      background:rgba(0,0,0,.8); border:1px solid rgba(255,255,255,.12); border-radius:3px; overflow:hidden;
+    }
+    .input-row input { flex:1; background:transparent; border:none; outline:none; color:rgba(255,255,255,.85); padding:0 14px; font-size:15px; letter-spacing:.1em; font-family:var(--px); }
+    .input-row input::placeholder { color:rgba(255,255,255,.22); }
+    .input-row .send { background:rgba(255,255,255,.08); border:none; border-left:1px solid rgba(255,255,255,.1); padding:0 16px; color:rgba(255,255,255,.45); font-size:16px; }
+
+    /* HP bar */
+    .hp-block { background:rgba(0,0,0,.65); border:1px solid rgba(255,255,255,.1); border-radius:3px; padding:8px 14px; }
+    .hp-head  { display:flex; justify-content:space-between; margin-bottom:5px; }
+    .hp-name  { font-size:16px; letter-spacing:.1em; }
+    .hp-row   { display:flex; align-items:center; gap:7px; }
+    .hp-lbl   { font-size:12px; letter-spacing:.14em; color:rgba(255,255,255,.4); min-width:18px; }
+    .hp-track { flex:1; height:5px; background:rgba(255,255,255,.1); border-radius:1px; overflow:hidden; }
+    .hp-fill  { height:100%; background:rgba(255,255,255,.82); border-radius:1px; }
+    .hp-num   { font-size:12px; color:rgba(255,255,255,.32); letter-spacing:.06em; }
+
+    /* ── Battle action bar ── */
+    .bat-bar {
+      display:grid;
+      grid-template-columns:160px 1fr 220px;
+      height:148px;
+    }
+    .bat-portrait {
+      border-right:1px solid rgba(255,255,255,.07);
+      padding:10px 16px;
+      display:flex; flex-direction:column; gap:6px;
+      align-items:center; justify-content:center;
+    }
+    .bat-avatar {
+      width:58px; height:58px; border-radius:50%;
+      overflow:hidden; border:1px solid rgba(255,255,255,.22);
+      flex-shrink:0; background:rgba(255,255,255,.04);
+    }
+    .bat-avatar img { width:100%; height:100%; object-fit:cover; object-position:top center; filter:grayscale(.15); }
+    .bat-name  { font-size:15px; letter-spacing:.1em; }
+    .bat-level { font-size:10px; color:rgba(255,255,255,.3); letter-spacing:.08em; }
+    .bat-hp    { display:flex; align-items:center; gap:6px; width:100%; }
+    .bat-hp-lbl { font-size:10px; letter-spacing:.1em; color:rgba(255,255,255,.38); min-width:16px; }
+    .bat-hp-track { flex:1; height:3px; background:rgba(255,255,255,.1); border-radius:1px; overflow:hidden; }
+    .bat-hp-fill  { height:100%; background:rgba(255,255,255,.82); border-radius:1px; }
+    .bat-hp-num   { font-size:10px; color:rgba(255,255,255,.32); }
+
+    .bat-log {
+      border-right:1px solid rgba(255,255,255,.07);
+      padding:10px 18px;
+      display:flex; flex-direction:column; justify-content:flex-end; gap:2px;
+      overflow:hidden;
+    }
+    .bat-log-line { font-size:14px; letter-spacing:.04em; line-height:1.3; }
+    .bat-log-line.dim1 { color:rgba(255,255,255,.15); }
+    .bat-log-line.dim2 { color:rgba(255,255,255,.25); }
+    .bat-log-line.dim3 { color:rgba(255,255,255,.45); }
+    .bat-log-line.active { color:rgba(255,255,255,.9); }
+
+    .bat-skills { display:grid; grid-template-columns:1fr 1fr; }
+    .skill-btn {
+      background:transparent; border:none;
+      display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px;
+      cursor:pointer; font-family:var(--px);
+      color:rgba(255,255,255,.45);
+    }
+    .skill-btn:nth-child(odd)  { border-right:1px solid rgba(255,255,255,.07); }
+    .skill-btn:nth-child(-n+2) { border-bottom:1px solid rgba(255,255,255,.07); }
+    .skill-btn.active { background:rgba(255,255,255,.09); color:#fff; }
+    .skill-icon { font-size:24px; line-height:1; }
+    .skill-lbl  { font-size:11px; letter-spacing:.1em; }
+
+    /* Dynamic panel sizing annotation */
+    .panel-label { position:absolute; bottom:10px; left:0; right:0; text-align:center; font-size:11px; letter-spacing:.22em; text-transform:uppercase; color:rgba(255,255,255,.25); pointer-events:none; z-index:20; }
+    .panel-label.active { color:rgba(255,255,255,.45); }
+
+    /* Divider */
+    .div { display:flex; align-items:center; gap:18px; margin:64px 0; }
+    .div-line { flex:1; height:1px; background:rgba(255,255,255,.055); }
+    .div-lbl  { font-size:10px; letter-spacing:.5em; text-transform:uppercase; color:rgba(255,255,255,.2); white-space:nowrap; }
+
+    /* Component grid */
+    .comp-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:24px; }
+    .comp-card { background:#0a0a0a; border:1px solid rgba(255,255,255,.07); padding:22px; }
+    .comp-ttl  { font-size:10px; letter-spacing:.4em; text-transform:uppercase; color:rgba(255,255,255,.52); margin-bottom:14px; padding-bottom:10px; border-bottom:1px solid rgba(255,255,255,.05); }
+
+    .footer { text-align:center; padding:40px 0; margin-top:20px; }
+    .footer span { font-size:9px; letter-spacing:.45em; text-transform:uppercase; color:rgba(255,255,255,.16); }
+  </style>
+</head>
+<body>
+<div style="max-width:1200px; margin:0 auto;">
+
+  <!-- Header -->
+  <div class="doc-hd">
+    <div class="ey"><div class="di"></div><span>Design System</span><div class="dio"></div></div>
+    <h1>Visual Novel System</h1>
+    <p class="sub">AI Dungeon &nbsp;·&nbsp; All Screen Types</p>
+  </div>
+
+  <!-- ══════════════════════════════════════════════
+       01  FULL SCREEN  ·  No split
+       ══════════════════════════════════════════════ -->
+  <div class="sec">
+    <div class="sec-lbl">01 — Full Screen · No split · Atmosphere / Narration</div>
+    <div class="sec-note"><span class="tag">1 panel</span><span>Full-bleed · Narration box bottom-center · No character line</span></div>
+    <div class="frame f169" style="display:grid; grid-template-rows:48px 1fr 52px;">
+
+      <div class="hud">
+        <div class="hud-ch">CH.1  THE OLD CITY<small>0.  PROLOGUE</small></div>
+        <div class="hud-ctr">INNER VOICE</div>
+        <div class="hud-nav"><span>[ESC]</span><span>SAVE</span><span>LOAD</span><span>LOG</span><span>AUTO</span></div>
+      </div>
+
+      <div style="position:relative; overflow:hidden;">
+        <div class="pbg" style="background-image:url('/assets/background-city.png'); filter:grayscale(1) brightness(.28);"></div>
+        <div class="pov" style="background:linear-gradient(to bottom,rgba(0,0,0,.2),rgba(0,0,0,.72));"></div>
+        <div style="position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(255,255,255,.012) 3px,rgba(255,255,255,.012) 4px);pointer-events:none;"></div>
+        <img src="/assets/character-detective.png" class="char" style="height:80%; opacity:.22; filter:grayscale(1) drop-shadow(0 0 20px rgba(0,0,0,1));" alt="">
+
+        <!-- Narration — name inside, bottom-center -->
+        <div style="position:absolute; bottom:14px; left:50%; transform:translateX(-50%); width:70%; max-width:780px; z-index:20; pointer-events:none;">
+          <div class="box-narr">
+            <div class="box-name narrator">NARRATOR</div>
+            <p class="box-text" style="font-size:20px; color:rgba(255,255,255,.78); text-align:left;">
+              The city never sleeps. It breathes, it watches, it remembers. And somewhere between the neon and the fog — the truth is waiting for someone brave enough to look.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div class="ctrl"><button class="space-btn">[SPACE] &nbsp;NEXT</button></div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════
+       02  2-PANEL DIALOGUE
+       ══════════════════════════════════════════════ -->
+  <div class="sec">
+    <div class="sec-lbl">02 — 2-Panel · Dialogue · Active speaker + listener</div>
+    <div class="sec-note">
+      <span class="tag">2 panels</span>
+      <span>Left 38% inactive · Right 62% active (accordion) · Bubble @ bottom:42% · Narration @ bottom:10px · 172px gap ✓</span>
+    </div>
+    <div class="frame f169" style="display:grid; grid-template-rows:48px 1fr 52px;">
+
+      <div class="hud">
+        <div class="hud-ch">CH.1  THE OLD CITY<small>1.  HARBOR DISTRICT</small></div>
+        <div class="hud-ctr">HARBOR DISTRICT</div>
+        <div class="hud-nav"><span>[ESC]</span><span>SAVE</span><span>LOAD</span><span>LOG</span><span>AUTO</span></div>
+      </div>
+
+      <div style="position:relative; display:flex; gap:8px; padding:0 8px 8px;">
+        <!-- Left — inactive 38% -->
+        <div class="panel" style="flex:0 0 38%;">
+          <div class="pbg" style="background-image:url('/assets/background-city.png'); filter:grayscale(1) brightness(.25);"></div>
+          <div class="pov" style="background:rgba(0,0,0,.32);"></div>
+          <img src="/assets/character-detective.png" class="char" style="height:88%; opacity:.32; filter:grayscale(1) drop-shadow(0 0 20px rgba(0,0,0,1));" alt="Detective">
+          <div class="panel-label">INACTIVE</div>
+        </div>
+        <!-- Right — active 62% -->
+        <div class="panel" style="flex:0 0 62%;">
+          <div class="pbg" style="background-image:url('/assets/background-city.png'); filter:grayscale(.6) brightness(.42);"></div>
+          <div class="pov" style="background:linear-gradient(to bottom,rgba(0,0,0,.08),rgba(0,0,0,.52));"></div>
+          <img src="/assets/character-kim.png" class="char" style="height:92%; transform:translateX(-50%) scaleX(-1); filter:drop-shadow(0 0 28px rgba(0,0,0,.9));" alt="Kim">
+          <!-- Bubble @ bottom:42% — name inside -->
+          <div style="position:absolute; bottom:42%; left:50%; transform:translateX(-48%); z-index:10; max-width:290px;">
+            <div class="box">
+              <div class="box-name">DETECTIVE KIM</div>
+              <p class="box-text">"So, you finally decided to show up. We have a situation at the old docks."</p>
+            </div>
+          </div>
+          <div class="panel-label active">ACTIVE · SPEAKING</div>
+        </div>
+        <!-- Narration @ bottom:10px — 172px below bubble ✓ -->
+        <div style="position:absolute; bottom:10px; left:50%; transform:translateX(-50%); width:56%; max-width:620px; z-index:20; pointer-events:none;">
+          <div class="box-narr">
+            <div class="box-name narrator">NARRATOR</div>
+            <p class="box-text">The rain hasn't stopped in three days. Someone wants us here before the evidence washes away.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="ctrl"><button class="space-btn">[SPACE] &nbsp;NEXT</button></div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════
+       03  3-PANEL SCENE
+       ══════════════════════════════════════════════ -->
+  <div class="sec">
+    <div class="sec-lbl">03 — 3-Panel · Scene · Multi-character, center narration zone</div>
+    <div class="sec-note">
+      <span class="tag">3 panels</span>
+      <span>Left 27% silent · Center 46% narration only · Right 27% active speaker · Fully isolated text zones</span>
+    </div>
+    <div class="frame f169" style="display:grid; grid-template-rows:48px 1fr 52px;">
+
+      <div class="hud">
+        <div class="hud-ch">CH.1  THE OLD CITY<small>2.  INTERROGATION ROOM</small></div>
+        <div class="hud-ctr">INTERROGATION ROOM</div>
+        <div class="hud-nav"><span>[ESC]</span><span>SAVE</span><span>LOAD</span><span>LOG</span><span>AUTO</span></div>
+      </div>
+
+      <div style="display:flex; gap:8px; padding:0 8px 8px; position:relative;">
+        <!-- Left silent -->
+        <div class="panel" style="flex:0 0 27%;">
+          <div class="pbg" style="background-image:url('/assets/background-city.png'); filter:grayscale(1) brightness(.22);"></div>
+          <div class="pov" style="background:rgba(0,0,0,.45);"></div>
+          <img src="/assets/character-detective.png" class="char" style="height:85%; opacity:.28; filter:grayscale(1) drop-shadow(0 0 16px rgba(0,0,0,1));" alt="">
+          <div class="panel-label">SILENT</div>
+        </div>
+        <!-- Center — narration only -->
+        <div class="panel" style="flex:1;">
+          <div class="pbg" style="background-image:url('/assets/background-city.png'); filter:grayscale(.9) brightness(.32) blur(1px);"></div>
+          <div class="pov" style="background:linear-gradient(to bottom,rgba(0,0,0,.5),rgba(0,0,0,.82));"></div>
+          <div style="position:absolute; bottom:14px; left:12px; right:12px; z-index:10;">
+            <div class="box-narr" style="text-align:left;">
+              <div class="box-name narrator">NARRATOR</div>
+              <p class="box-text" style="font-size:17px; color:rgba(255,255,255,.72); text-align:left;">
+                She slides the photograph across the table without looking up. The fluorescent light flickers once, then holds.
+              </p>
+            </div>
+          </div>
+        </div>
+        <!-- Right active -->
+        <div class="panel" style="flex:0 0 27%;">
+          <div class="pbg" style="background-image:url('/assets/background-city.png'); filter:grayscale(.6) brightness(.4);"></div>
+          <div class="pov" style="background:linear-gradient(to bottom,rgba(0,0,0,.08),rgba(0,0,0,.55));"></div>
+          <img src="/assets/character-kim.png" class="char" style="height:90%; transform:translateX(-50%) scaleX(-1); filter:drop-shadow(0 0 24px rgba(0,0,0,.9));" alt="Kim">
+          <div style="position:absolute; bottom:35%; left:50%; transform:translateX(-50%); z-index:10; max-width:90%;">
+            <div class="box">
+              <div class="box-name">DETECTIVE KIM</div>
+              <p class="box-text" style="font-size:16px;">"Look at the photo."</p>
+            </div>
+          </div>
+          <div class="panel-label active">ACTIVE</div>
+        </div>
+      </div>
+
+      <div class="ctrl"><button class="space-btn">[SPACE] &nbsp;NEXT</button></div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════
+       04  CHOICE SELECTION
+       ══════════════════════════════════════════════ -->
+  <div class="sec">
+    <div class="sec-lbl">04 — 2-Panel · Choice Selection · Player decision point</div>
+    <div class="sec-note">
+      <span class="tag">2 panels</span>
+      <span>Left dim · Right choices @ bottom:8px · Input bar in controls row · No narration</span>
+    </div>
+    <div class="frame f169" style="display:grid; grid-template-rows:48px 1fr 52px;">
+
+      <div class="hud">
+        <div class="hud-ch">CH.1  THE OLD CITY<small>1.  HARBOR DISTRICT</small></div>
+        <div class="hud-ctr">HARBOR DISTRICT</div>
+        <div class="hud-nav"><span>[ESC]</span><span>SAVE</span><span>LOAD</span><span>LOG</span><span>AUTO</span></div>
+      </div>
+
+      <div style="display:flex; gap:8px; padding:0 8px 8px; position:relative;">
+        <div class="panel" style="flex:0 0 42%;">
+          <div class="pbg" style="background-image:url('/assets/background-city.png'); filter:grayscale(1) brightness(.22);"></div>
+          <div class="pov" style="background:rgba(0,0,0,.45);"></div>
+          <img src="/assets/character-detective.png" class="char" style="height:88%; opacity:.28; filter:grayscale(1) drop-shadow(0 0 16px rgba(0,0,0,1));" alt="">
+        </div>
+        <div class="panel" style="flex:1;">
+          <div class="pbg" style="background-image:url('/assets/background-city.png'); filter:grayscale(.8) brightness(.35);"></div>
+          <div class="pov" style="background:linear-gradient(to bottom,rgba(0,0,0,.1),rgba(0,0,0,.65));"></div>
+          <img src="/assets/character-kim.png" class="char" style="height:92%; transform:translateX(-50%) scaleX(-1); opacity:.5; filter:drop-shadow(0 0 28px rgba(0,0,0,.9));" alt="">
+          <div class="choices" style="bottom:8px; left:8px; right:8px;">
+            <div class="choice sel">▸&nbsp;&nbsp;Ask about the murder</div>
+            <div class="choice">▸&nbsp;&nbsp;Show the evidence</div>
+            <div class="choice">▸&nbsp;&nbsp;Ask about the old docks</div>
+            <div class="choice">▸&nbsp;&nbsp;Leave</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="ctrl">
+        <div class="input-row">
+          <input type="text" placeholder="WRITE YOUR ACTION..." readonly>
+          <button class="send">▶</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════
+       05  BATTLE SCREEN  ·  Stare-down + portrait bar
+       ══════════════════════════════════════════════ -->
+  <div class="sec">
+    <div class="sec-lbl">05 — Battle Screen · Stare-down · Portrait bar · Icon actions · Combat log</div>
+    <div class="sec-note">
+      <span class="tag">Full screen · Wide</span>
+      <span>Player portrait + HP left · Combat log center · Skill icons 2×2 right · Enemy HP top-right · No free text</span>
+    </div>
+    <div class="frame f169">
+
+      <!-- Scene — full frame -->
+      <div class="pbg" style="background-image:url('/assets/background-fight.png'); filter:grayscale(.7) brightness(.5);"></div>
+      <div class="pov" style="background:linear-gradient(to right,rgba(0,0,0,.55) 0%,transparent 30%,transparent 70%,rgba(0,0,0,.45) 100%);"></div>
+      <div class="pov" style="background:linear-gradient(to bottom,rgba(0,0,0,.35) 0%,transparent 25%,transparent 65%,rgba(0,0,0,.75) 100%);"></div>
+
+      <!-- HUD top-left -->
+      <div style="position:absolute; top:16px; left:20px; z-index:20;">
+        <div style="background:rgba(0,0,0,.6); border:1px solid rgba(255,255,255,.12); border-radius:3px; padding:5px 12px; font-size:13px; letter-spacing:.12em; color:rgba(255,255,255,.38); margin-bottom:5px;">[ESC] RETREAT</div>
+        <p style="font-size:12px; letter-spacing:.1em; color:rgba(255,255,255,.22); padding-left:2px;">ROUND 1 / 10</p>
+      </div>
+
+      <!-- Enemy HP blocks — top right -->
+      <div style="position:absolute; top:20px; right:24px; z-index:20; display:flex; flex-direction:column; gap:8px; align-items:flex-end;">
+        <div class="hp-block" style="min-width:200px;">
+          <div class="hp-head"><span class="hp-name">ENFORCER</span></div>
+          <div class="hp-row"><span class="hp-lbl">HP</span><div class="hp-track"><div class="hp-fill" style="width:74%;"></div></div><span class="hp-num">74</span></div>
+        </div>
+        <div class="hp-block" style="min-width:200px;">
+          <div class="hp-head"><span class="hp-name">FIXER</span></div>
+          <div class="hp-row"><span class="hp-lbl">HP</span><div class="hp-track"><div class="hp-fill" style="width:64%;"></div></div><span class="hp-num">51</span></div>
+        </div>
+      </div>
+
+      <!-- Enemies — stare-down positions (raised for floating bar clearance) -->
+      <img src="/assets/enemy-2.png" alt="Fixer"    style="position:absolute; bottom:30%; right:22%; height:38%; width:auto; object-fit:contain; object-position:bottom; filter:drop-shadow(0 8px 32px rgba(0,0,0,.9)); z-index:10;">
+      <img src="/assets/enemy-1.png" alt="Enforcer" style="position:absolute; bottom:30%; right:6%;  height:44%; width:auto; object-fit:contain; object-position:bottom; filter:drop-shadow(0 8px 32px rgba(0,0,0,.9)); z-index:10;">
+
+      <!-- Player — left, back view (raised) -->
+      <img src="/assets/character-player-back.png" alt="Player" style="position:absolute; bottom:24%; left:-1%; height:65%; width:auto; object-fit:contain; object-position:bottom; filter:drop-shadow(0 0 60px rgba(0,0,0,.95)); z-index:20;">
+
+      <!-- Action bar — floating panel, centered, compact width -->
+      <div class="bat-bar" style="position:absolute; bottom:20px; left:50%; transform:translateX(-50%); width:68%; z-index:30; backdrop-filter:blur(10px); background:rgba(0,0,0,.82); border:1px solid rgba(255,255,255,.12); border-radius:6px; overflow:hidden;">
+
+        <!-- Player portrait + HP — portrait above HP -->
+        <div class="bat-portrait">
+          <div class="bat-avatar">
+            <img src="/assets/character-detective.png" alt="Detective">
+          </div>
+          <div style="text-align:center;">
+            <div class="bat-name">DETECTIVE</div>
+            <div class="bat-level">LV 12</div>
+          </div>
+          <div class="bat-hp">
+            <span class="bat-hp-lbl">HP</span>
+            <div class="bat-hp-track"><div class="bat-hp-fill" style="width:68%;"></div></div>
+            <span class="bat-hp-num">68/100</span>
+          </div>
+        </div>
+
+        <!-- Combat log -->
+        <div class="bat-log">
+          <p class="bat-log-line dim1">ROUND 1 — COMBAT BEGINS</p>
+          <p class="bat-log-line dim2">ENFORCER moves forward.</p>
+          <p class="bat-log-line dim3">FIXER flanks from the left.</p>
+          <p class="bat-log-line active">▸ Your move.</p>
+        </div>
+
+        <!-- Skill icon buttons — 2×2 -->
+        <div class="bat-skills">
+          <button class="skill-btn active">
+            <span class="skill-icon">⚔</span>
+            <span class="skill-lbl">STRIKE</span>
+          </button>
+          <button class="skill-btn">
+            <span class="skill-icon">⊙</span>
+            <span class="skill-lbl">ANALYSE</span>
+          </button>
+          <button class="skill-btn">
+            <span class="skill-icon">◆</span>
+            <span class="skill-lbl">INTIMIDATE</span>
+          </button>
+          <button class="skill-btn">
+            <span class="skill-icon">▷</span>
+            <span class="skill-lbl">FLEE</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════
+       06  DYNAMIC PANEL SIZING
+       ══════════════════════════════════════════════ -->
+  <div class="sec">
+    <div class="sec-lbl">06 — Dynamic Panel Sizing · Active speaker expands · 0.35s ease</div>
+    <div class="sec-note">
+      <span class="tag">Accordion · Wide</span>
+      <span>Active flex:62% · Inactive flex:38% · Transitions: flex + filter + opacity</span>
+    </div>
+
+    <p style="font-size:11px; letter-spacing:.35em; text-transform:uppercase; color:rgba(255,255,255,.5); margin-bottom:10px;">State A — Right active</p>
+    <div class="frame" style="width:1144px; height:322px; display:grid; grid-template-rows:48px 1fr;">
+      <div class="hud">
+        <div class="hud-ch">CH.1<small>HARBOR DISTRICT</small></div>
+        <div class="hud-ctr">HARBOR DISTRICT</div>
+        <div class="hud-nav"><span>[ESC]</span><span>SAVE</span><span>LOAD</span><span>AUTO</span></div>
+      </div>
+      <div style="display:flex; gap:8px; padding:0 8px 8px; position:relative;">
+        <div class="panel" style="flex:0 0 38%;">
+          <div class="pbg" style="background-image:url('/assets/background-city.png'); filter:grayscale(1) brightness(.22);"></div>
+          <div class="pov" style="background:rgba(0,0,0,.45);"></div>
+          <img src="/assets/character-detective.png" class="char" style="height:88%; opacity:.28; filter:grayscale(1) drop-shadow(0 0 16px rgba(0,0,0,1));" alt="">
+          <div class="panel-label">INACTIVE · 38%</div>
+        </div>
+        <div class="panel" style="flex:0 0 62%;">
+          <div class="pbg" style="background-image:url('/assets/background-city.png'); filter:grayscale(.6) brightness(.42);"></div>
+          <div class="pov" style="background:linear-gradient(to bottom,rgba(0,0,0,.08),rgba(0,0,0,.52));"></div>
+          <img src="/assets/character-kim.png" class="char" style="height:92%; transform:translateX(-50%) scaleX(-1); filter:drop-shadow(0 0 28px rgba(0,0,0,.9));" alt="">
+          <div style="position:absolute; bottom:36%; left:50%; transform:translateX(-48%); z-index:10; max-width:290px;">
+            <div class="box">
+              <div class="box-name">DETECTIVE KIM</div>
+              <p class="box-text" style="font-size:16px;">"So, you finally decided to show up."</p>
+            </div>
+          </div>
+          <div class="panel-label active">ACTIVE · SPEAKING · 62%</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="height:20px;"></div>
+
+    <p style="font-size:11px; letter-spacing:.35em; text-transform:uppercase; color:rgba(255,255,255,.5); margin-bottom:10px;">State B — Left active</p>
+    <div class="frame" style="width:1144px; height:322px; display:grid; grid-template-rows:48px 1fr;">
+      <div class="hud">
+        <div class="hud-ch">CH.1<small>HARBOR DISTRICT</small></div>
+        <div class="hud-ctr">HARBOR DISTRICT</div>
+        <div class="hud-nav"><span>[ESC]</span><span>SAVE</span><span>LOAD</span><span>AUTO</span></div>
+      </div>
+      <div style="display:flex; gap:8px; padding:0 8px 8px; position:relative;">
+        <div class="panel" style="flex:0 0 62%;">
+          <div class="pbg" style="background-image:url('/assets/background-city.png'); filter:grayscale(.6) brightness(.42);"></div>
+          <div class="pov" style="background:linear-gradient(to bottom,rgba(0,0,0,.08),rgba(0,0,0,.52));"></div>
+          <img src="/assets/character-detective.png" class="char" style="height:88%; filter:drop-shadow(0 0 28px rgba(0,0,0,.9));" alt="">
+          <div style="position:absolute; bottom:36%; left:50%; transform:translateX(-48%); z-index:10; max-width:290px;">
+            <div class="box">
+              <div class="box-name">DETECTIVE</div>
+              <p class="box-text" style="font-size:16px;">"The evidence is right here. You can't deny it."</p>
+            </div>
+          </div>
+          <div class="panel-label active">ACTIVE · SPEAKING · 62%</div>
+        </div>
+        <div class="panel" style="flex:0 0 38%;">
+          <div class="pbg" style="background-image:url('/assets/background-city.png'); filter:grayscale(1) brightness(.22);"></div>
+          <div class="pov" style="background:rgba(0,0,0,.45);"></div>
+          <img src="/assets/character-kim.png" class="char" style="height:92%; transform:translateX(-50%) scaleX(-1); opacity:.28; filter:grayscale(1) drop-shadow(0 0 16px rgba(0,0,0,1));" alt="">
+          <div class="panel-label">INACTIVE · 38%</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Divider -->
+  <div class="div">
+    <div class="div-line"></div><div class="di"></div>
+    <div class="div-lbl">UI Component Library</div>
+    <div class="dio"></div><div class="div-line"></div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════
+       07  COMPONENTS
+       ══════════════════════════════════════════════ -->
+  <div class="sec">
+    <div class="sec-lbl">07 — Components</div>
+    <div class="comp-grid">
+
+      <!-- Speech bubble — name inside -->
+      <div class="comp-card">
+        <div class="comp-ttl">Speech Bubble · name inside</div>
+        <div style="background:#040609; padding:16px; border-radius:4px;">
+          <div class="box" style="display:inline-block; max-width:100%;">
+            <div class="box-name">DETECTIVE KIM</div>
+            <p class="box-text" style="font-size:16px;">"The evidence doesn't lie."</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Narration — name inside -->
+      <div class="comp-card">
+        <div class="comp-ttl">Narration Box · name inside</div>
+        <div class="box-narr" style="text-align:left;">
+          <div class="box-name narrator">NARRATOR</div>
+          <p class="box-text" style="font-size:15px;">The city never sleeps. It breathes, it watches.</p>
+        </div>
+      </div>
+
+      <!-- Choices -->
+      <div class="comp-card">
+        <div class="comp-ttl">Choice Buttons · radius:4</div>
+        <div style="display:flex; flex-direction:column; gap:4px;">
+          <div class="choice sel">▸&nbsp;&nbsp;Investigate scene</div>
+          <div class="choice">▸&nbsp;&nbsp;Question witness</div>
+          <div class="choice">▸&nbsp;&nbsp;Call backup</div>
+          <div class="choice">▸&nbsp;&nbsp;Walk away</div>
+        </div>
+      </div>
+
+      <!-- Player portrait + HP -->
+      <div class="comp-card">
+        <div class="comp-ttl">Player Portrait + HP Bar · centered vertical</div>
+        <div class="bat-portrait" style="border:none; padding:0; height:130px;">
+          <div class="bat-avatar">
+            <img src="/assets/character-detective.png" alt="">
+          </div>
+          <div style="text-align:center;">
+            <div class="bat-name">DETECTIVE</div>
+            <div class="bat-level">LV 12</div>
+          </div>
+          <div class="bat-hp">
+            <span class="bat-hp-lbl">HP</span>
+            <div class="bat-hp-track"><div class="bat-hp-fill" style="width:68%;"></div></div>
+            <span class="bat-hp-num">68/100</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Skill icon buttons -->
+      <div class="comp-card">
+        <div class="comp-ttl">Skill Icon Buttons · 2×2</div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; height:120px; border:1px solid rgba(255,255,255,.07);">
+          <button class="skill-btn active" style="border-right:1px solid rgba(255,255,255,.07); border-bottom:1px solid rgba(255,255,255,.07);">
+            <span class="skill-icon">⚔</span><span class="skill-lbl">STRIKE</span>
+          </button>
+          <button class="skill-btn" style="border-bottom:1px solid rgba(255,255,255,.07);">
+            <span class="skill-icon">⊙</span><span class="skill-lbl">ANALYSE</span>
+          </button>
+          <button class="skill-btn" style="border-right:1px solid rgba(255,255,255,.07);">
+            <span class="skill-icon">◆</span><span class="skill-lbl">INTIMIDATE</span>
+          </button>
+          <button class="skill-btn">
+            <span class="skill-icon">▷</span><span class="skill-lbl">FLEE</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Tone system -->
+      <div class="comp-card">
+        <div class="comp-ttl">Tone System</div>
+        <div style="display:flex; flex-direction:column; gap:10px;">
+          <div style="display:flex; gap:10px; align-items:center;">
+            <div style="width:32px; height:32px; background:rgba(255,255,255,.9); border-radius:2px; flex-shrink:0;"></div>
+            <div><div style="font-size:12px;">Active text</div><div style="font-size:11px; color:rgba(255,255,255,.3); font-family:monospace;">rgba(255,255,255,.9)</div></div>
+          </div>
+          <div style="display:flex; gap:10px; align-items:center;">
+            <div style="width:32px; height:32px; background:rgba(255,198,70,.9); border-radius:2px; flex-shrink:0;"></div>
+            <div><div style="font-size:12px;">Character name</div><div style="font-size:11px; color:rgba(255,255,255,.3); font-family:monospace;">rgba(255,198,70,.9)</div></div>
+          </div>
+          <div style="display:flex; gap:10px; align-items:center;">
+            <div style="width:32px; height:32px; background:rgba(140,210,255,.7); border-radius:2px; flex-shrink:0;"></div>
+            <div><div style="font-size:12px;">Narrator label</div><div style="font-size:11px; color:rgba(255,255,255,.3); font-family:monospace;">rgba(140,210,255,.7)</div></div>
+          </div>
+          <div style="display:flex; gap:10px; align-items:center;">
+            <div style="width:32px; height:32px; background:rgba(0,0,0,.68); border:1px solid rgba(255,255,255,.12); border-radius:2px; flex-shrink:0;"></div>
+            <div><div style="font-size:12px;">UI container</div><div style="font-size:11px; color:rgba(255,255,255,.3); font-family:monospace;">rgba(0,0,0,.68)</div></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Footer — no border-top -->
+  <div class="footer">
+    <div style="display:inline-flex; align-items:center; gap:12px;">
+      <div class="di" style="width:7px; height:7px;"></div>
+      <span>AI Dungeon &nbsp;·&nbsp; Visual Novel Design System &nbsp;·&nbsp; v4</span>
+      <div class="dio" style="width:6px; height:6px;"></div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

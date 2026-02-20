@@ -5,49 +5,46 @@ import {
   Outlet,
   Link,
 } from '@tanstack/react-router'
-import { HomePage } from './pages/HomePage'
-import { NewGamePage } from './pages/NewGamePage'
-import { GameSessionPage } from './pages/GameSessionPage'
+import { GamePreviewPage } from './pages/GamePreviewPage'
+import { BattleScenePage } from './pages/BattleScenePage'
 
-function RootLayout() {
+const rootRoute = createRootRoute({
+  component: Outlet,
+})
+
+function Index() {
   return (
-    <div className="app-shell">
-      <header className="app-header">
-        <Link to="/" className="app-logo">
-          <span className="logo-icon">⚔️</span>
-          <span className="logo-text">AI Dungeon</span>
-        </Link>
-      </header>
-      <main className="app-main">
-        <Outlet />
-      </main>
+    <div className="p-4 flex flex-col items-center justify-center h-screen bg-gray-900 text-white">
+      <h3 className="text-3xl mb-8">Welcome Home!</h3>
+      <Link 
+        to="/preview" 
+        className="px-6 py-3 bg-blue-600 rounded-lg hover:bg-blue-700 transition"
+      >
+        Go to Game Preview
+      </Link>
     </div>
   )
 }
 
-const rootRoute = createRootRoute({
-  component: RootLayout,
-})
-
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/',
-  component: HomePage,
+  component: Index,
 })
 
-const newGameRoute = createRoute({
+const previewRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: '/new-game',
-  component: NewGamePage,
+  path: '/preview',
+  component: GamePreviewPage,
 })
 
-const gameRoute = createRoute({
+const battleRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: '/game/$sessionId',
-  component: GameSessionPage,
+  path: '/battle',
+  component: BattleScenePage,
 })
 
-const routeTree = rootRoute.addChildren([indexRoute, newGameRoute, gameRoute])
+const routeTree = rootRoute.addChildren([indexRoute, previewRoute, battleRoute])
 
 export const router = createRouter({ routeTree })
 
