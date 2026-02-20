@@ -10,6 +10,7 @@ import { BattleFrame }     from '../components/vn/frames/BattleFrame';
 import { SkillCheckFrame } from '../components/vn/frames/SkillCheckFrame';
 import { InventoryFrame }  from '../components/vn/frames/InventoryFrame';
 import { MapFrame }        from '../components/vn/frames/MapFrame';
+import { TacticalMapFrame } from '../components/vn/frames/TacticalMapFrame';
 import { FrameEffects }    from '../components/vn/FrameEffects';
 import { MOCK_PACK, PREVIEW_GROUPS } from '../lib/mockVNData';
 import type { VNFrame }    from '../../server/vn/types/vnFrame';
@@ -87,6 +88,15 @@ export function VNFramePreviewPage() {
           <MapFrame
             {...common}
             onChoiceSelect={(_id) => handleAdvance()}
+          />
+        );
+      case 'tactical-map':
+        return (
+          <TacticalMapFrame
+            frame={frame}
+            pack={MOCK_PACK}
+            onCombatComplete={(result, summary) => console.log('[preview] combat complete:', result, summary)}
+            onFreeText={(text, _state) => console.log('[preview] free text:', text)}
           />
         );
       case 'character-sheet':

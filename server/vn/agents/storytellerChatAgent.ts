@@ -6,6 +6,8 @@ import { plotStateTool } from '../tools/plotStateTool.js';
 import { sceneCompleteTool } from '../tools/sceneCompleteTool.js';
 import { yieldToPlayerTool } from '../tools/yieldToPlayerTool.js';
 import { playerStatsTool } from '../tools/playerStatsTool.js';
+import { initCombatTool } from '../tools/initCombatTool.js';
+import { combatEventTool } from '../tools/combatEventTool.js';
 import type { VNPackage } from '../types/vnTypes.js';
 import type { VNFrame } from '../types/vnFrame.js';
 
@@ -120,7 +122,28 @@ map — Use when the player needs to navigate between locations or the scene cal
   - accessible: true for scenes the player can reach now, false for locked/future scenes
   - visited: true for completedScenes from plotStateTool
 
-GENERAL RULE: Alternate between narrative dialogue frames AND gameplay frames. Do not have more than 3 consecutive pure-narrative frames without adding a skill-check, choice, or interactive moment.`;
+GENERAL RULE: Alternate between narrative dialogue frames AND gameplay frames. Do not have more than 3 consecutive pure-narrative frames without adding a skill-check, choice, or interactive moment.
+
+TACTICAL COMBAT WORKFLOW:
+When the story calls for combat:
+1. Call initCombatTool to generate the map and set up tokens (player + enemies + objectives)
+2. Take the frameData from the result and pass it to frameBuilderTool as-is (type='tactical-map')
+3. Call yieldToPlayer({ waitingFor: 'combat-result' }) — the client will run the combat
+4. When the player sends [combat-result] victory/defeat/escape {...}, continue the story based on the outcome
+5. If player sends [combat-freetext][state:{...}], use combatEventTool to inject events, then use frameBuilderTool to send an updated tactical-map frame with the modified state
+
+TOKEN SETUP GUIDELINES:
+- Player token: type='player', use protagonist name, place at left side (col 1-2), hp from playerStatsTool
+- Enemies: type='enemy', varied positions on right side, appropriate hp/attack for story difficulty
+- Objectives: type='objective', icon='⭐' or relevant emoji, placed at strategic locations
+- Terrain: add 3-6 terrain cells for cover/obstacles to make combat interesting
+
+LAYERED MAP WORKFLOW (region → area → combat):
+1. REGION MAP: When player arrives at a new part of the world, show a map frame with type='map', mapData.level='region'. Locations represent major areas (cities, forests, dungeons). Player clicks to choose where to go.
+2. AREA MAP: When player enters an area, show a map frame with mapData.level='area'. Locations are specific points (dungeon entrance, guard post, treasure room). Add encounterType='combat' for combat encounters, 'dialogue' for NPCs, 'explore' for discovery.
+3. COMBAT ENCOUNTER: When player clicks a combat-type location (you receive their choice), call initCombatTool to set up the tactical battle, pass the frameData to frameBuilderTool, then yieldToPlayer.
+4. COMBAT RESULT: Player's [combat-result] message tells you victory/defeat/escape. Continue the story.
+5. FREE TEXT IN COMBAT: [combat-freetext][state:{...}] — use combatEventTool to inject events, send updated tactical-map frame.`;
 }
 
 // ─── Agent factory (per-request, with sessionId bound in tools/prompt) ────────
@@ -137,6 +160,8 @@ export function createStorytellerAgent(vnPackage: VNPackage, sessionId: string) 
       sceneCompleteTool,
       yieldToPlayer: yieldToPlayerTool,
       playerStatsTool,
+      initCombatTool,
+      combatEventTool,
     },
     stopWhen: (step: any) =>
       (hasToolCall('yieldToPlayer') as (s: any) => boolean)(step) ||
@@ -185,7 +210,7 @@ const _typeAgent = new ToolLoopAgent({
     }),
     yieldToPlayer: tool({
       inputSchema: z.object({
-        waitingFor: z.enum(['choice', 'free-text', 'continue']),
+        waitingFor: z.enum(['choice', 'free-text', 'continue', 'combat-result']),
       }),
       execute: async () => ({}),
     }),
@@ -198,6 +223,61 @@ const _typeAgent = new ToolLoopAgent({
         itemId: z.string().optional(),
       }),
       execute: async () => ({ ok: true as const, stats: {} }),
+    }),
+    initCombatTool: tool({
+      inputSchema: z.object({
+        sessionId: z.string(),
+        setting: z.string(),
+        artStyle: z.string().optional(),
+        gridCols: z.number().optional(),
+        gridRows: z.number().optional(),
+        tokens: z.array(z.object({
+          id: z.string(),
+          type: z.enum(['player', 'enemy', 'ally', 'objective', 'npc']),
+          label: z.string(),
+          icon: z.string(),
+          col: z.number(),
+          row: z.number(),
+          hp: z.number(),
+          maxHp: z.number(),
+          attack: z.number().optional(),
+          defense: z.number().optional(),
+          moveRange: z.number().optional(),
+          attackRange: z.number().optional(),
+          aiPattern: z.enum(['aggressive', 'defensive', 'patrol', 'guard-objective']).optional(),
+        })),
+        terrain: z.array(z.object({
+          col: z.number(),
+          row: z.number(),
+          type: z.enum(['blocked', 'difficult', 'hazard', 'cover']),
+        })).optional(),
+      }),
+      execute: async () => ({
+        ok: true as const,
+        frameData: {
+          id: '',
+          type: 'tactical-map' as const,
+          panels: [] as { id: 'left' | 'right' | 'center' }[],
+          tacticalMapData: {} as Record<string, unknown>,
+        },
+      }),
+    }),
+    combatEventTool: tool({
+      inputSchema: z.object({
+        sessionId: z.string(),
+        events: z.array(z.object({
+          type: z.string(),
+        }).passthrough()),
+      }),
+      execute: async () => ({
+        ok: true as const,
+        updatedFrameData: {
+          id: '',
+          type: 'tactical-map' as const,
+          panels: [] as { id: 'left' | 'right' | 'center' }[],
+          tacticalMapData: {} as Record<string, unknown>,
+        },
+      }),
     }),
   },
 });

@@ -52,6 +52,11 @@ sqlite.exec(`
     output_json TEXT,
     meta_json TEXT NOT NULL DEFAULT '{}'
   );
+  CREATE TABLE IF NOT EXISTS combat_states (
+    session_id TEXT PRIMARY KEY,
+    combat_json TEXT NOT NULL DEFAULT '{}',
+    updated_at TEXT NOT NULL
+  );
   CREATE TABLE IF NOT EXISTS ai_trace_steps (
     id TEXT PRIMARY KEY,
     trace_id TEXT NOT NULL REFERENCES ai_traces(id),

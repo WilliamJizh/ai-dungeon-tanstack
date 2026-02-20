@@ -40,6 +40,15 @@ export const plotStates = sqliteTable('plot_states', {
 });
 
 /**
+ * Stores active combat state per session for tactical-map encounters.
+ */
+export const combatStates = sqliteTable('combat_states', {
+  sessionId: text('session_id').primaryKey(),
+  combatJson: text('combat_json').notNull().default('{}'),
+  updatedAt: text('updated_at').notNull(),
+});
+
+/**
  * Captures high-level AI SDK request/response traces for debugging.
  */
 export const aiTraces = sqliteTable('ai_traces', {

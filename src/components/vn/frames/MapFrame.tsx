@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import type { VNFrame } from '../../../../server/vn/types/vnFrame';
 import type { VNPackage } from '../../../../server/vn/types/vnTypes';
 import { resolveAsset } from '../../../lib/resolveAsset';
@@ -18,11 +18,42 @@ interface MapFrameProps {
  * Accessible nodes are clickable (calls onChoiceSelect).
  * Current location pulses with amber highlight.
  * Escape closes the map.
+ * Drag to pan the map around.
  */
 export function MapFrame({ frame, pack, onAdvance, onChoiceSelect }: MapFrameProps) {
   const { locale } = useLocale();
   const mapData = frame.mapData;
   const [hoveredLocation, setHoveredLocation] = useState<string | null>(null);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const dragging = useRef(false);
+  const dragStart = useRef({ x: 0, y: 0 });
+  const panStart = useRef({ x: 0, y: 0 });
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const PAN_LIMIT = 300;
+
+  const handlePointerDown = useCallback((e: React.PointerEvent) => {
+    // Only pan if not clicking on a location node
+    if ((e.target as HTMLElement).closest('[data-location]')) return;
+    dragging.current = true;
+    dragStart.current = { x: e.clientX, y: e.clientY };
+    panStart.current = { ...pan };
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+  }, [pan]);
+
+  const handlePointerMove = useCallback((e: React.PointerEvent) => {
+    if (!dragging.current) return;
+    const dx = e.clientX - dragStart.current.x;
+    const dy = e.clientY - dragStart.current.y;
+    setPan({
+      x: Math.max(-PAN_LIMIT, Math.min(PAN_LIMIT, panStart.current.x + dx)),
+      y: Math.max(-PAN_LIMIT, Math.min(PAN_LIMIT, panStart.current.y + dy)),
+    });
+  }, []);
+
+  const handlePointerUp = useCallback(() => {
+    dragging.current = false;
+  }, []);
 
   const mapBg = resolveAsset(mapData?.backgroundAsset, pack);
 
@@ -42,8 +73,27 @@ export function MapFrame({ frame, pack, onAdvance, onChoiceSelect }: MapFramePro
   const currentLocationId = mapData.currentLocationId;
   const hoveredLoc = mapData.locations.find((l) => l.id === hoveredLocation);
 
+  // Layered map: read level from mapData (region, area, or default world)
+  const mapLevel = (mapData as Record<string, unknown>).level as
+    | 'region'
+    | 'area'
+    | undefined;
+  const headerKey =
+    mapLevel === 'region'
+      ? 'map_title_region'
+      : mapLevel === 'area'
+        ? 'map_title_area'
+        : 'map_title';
+
+  const ENCOUNTER_ICONS: Record<string, string> = {
+    combat: '\u2694\uFE0F',
+    dialogue: '\uD83D\uDCAC',
+    explore: '\uD83D\uDD0D',
+  };
+
   return (
     <div
+      ref={containerRef}
       style={{
         position: 'relative',
         width: '100%',
@@ -51,9 +101,15 @@ export function MapFrame({ frame, pack, onAdvance, onChoiceSelect }: MapFramePro
         background: '#000',
         fontFamily: "VT323, 'Courier New', monospace",
         overflow: 'hidden',
+        cursor: dragging.current ? 'grabbing' : 'grab',
+        touchAction: 'none',
       }}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerUp}
     >
-      {/* Map background */}
+      {/* Map background — pannable */}
       <div
         style={{
           position: 'absolute',
@@ -62,6 +118,8 @@ export function MapFrame({ frame, pack, onAdvance, onChoiceSelect }: MapFramePro
           backgroundSize: 'cover',
           backgroundPosition: 'center',
           filter: 'grayscale(.3) brightness(.6)',
+          transform: `translate(${pan.x}px, ${pan.y}px)`,
+          transition: dragging.current ? 'none' : 'transform 0.1s ease-out',
         }}
       />
 
@@ -104,11 +162,11 @@ export function MapFrame({ frame, pack, onAdvance, onChoiceSelect }: MapFramePro
             color: 'rgba(255,255,255,.7)',
           }}
         >
-          {t('map_title', locale)}
+          {t(headerKey, locale)}
         </div>
       </div>
 
-      {/* Location nodes */}
+      {/* Location nodes — pannable with background */}
       {mapData.locations.map((location) => {
         const isCurrent = location.id === currentLocationId;
         const isAccessible = location.accessible && !isCurrent;
@@ -119,10 +177,11 @@ export function MapFrame({ frame, pack, onAdvance, onChoiceSelect }: MapFramePro
         return (
           <div
             key={location.id}
+            data-location
             style={{
               position: 'absolute',
-              left: `${location.x}%`,
-              top: `${location.y}%`,
+              left: `calc(${location.x}% + ${pan.x}px)`,
+              top: `calc(${location.y}% + ${pan.y}px)`,
               transform: 'translate(-50%, -50%)',
               zIndex: 15,
               display: 'flex',
@@ -221,7 +280,7 @@ export function MapFrame({ frame, pack, onAdvance, onChoiceSelect }: MapFramePro
               />
             </div>
 
-            {/* Label */}
+            {/* Label + encounter type icon */}
             <div
               style={{
                 position: 'absolute',
@@ -232,6 +291,9 @@ export function MapFrame({ frame, pack, onAdvance, onChoiceSelect }: MapFramePro
                 whiteSpace: 'nowrap',
                 fontSize: 15,
                 letterSpacing: '.12em',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
                 color: isCurrent
                   ? '#facc15'
                   : isAccessible
@@ -242,6 +304,14 @@ export function MapFrame({ frame, pack, onAdvance, onChoiceSelect }: MapFramePro
               }}
             >
               {location.label}
+              {(() => {
+                const enc = (location as Record<string, unknown>)
+                  .encounterType as string | undefined;
+                const icon = enc ? ENCOUNTER_ICONS[enc] : undefined;
+                return icon ? (
+                  <span style={{ fontSize: 13, lineHeight: 1 }}>{icon}</span>
+                ) : null;
+              })()}
             </div>
           </div>
         );
@@ -271,14 +341,25 @@ export function MapFrame({ frame, pack, onAdvance, onChoiceSelect }: MapFramePro
             ? hoveredLoc.description
             : t('select_destination', locale)}
         </div>
-        <div
-          style={{
-            fontSize: 14,
-            letterSpacing: '.18em',
-            color: 'rgba(255,255,255,.45)',
-          }}
-        >
-          {t('close_map', locale)}
+        <div style={{ display: 'flex', gap: 16 }}>
+          <div
+            style={{
+              fontSize: 14,
+              letterSpacing: '.18em',
+              color: 'rgba(255,255,255,.35)',
+            }}
+          >
+            DRAG TO PAN
+          </div>
+          <div
+            style={{
+              fontSize: 14,
+              letterSpacing: '.18em',
+              color: 'rgba(255,255,255,.45)',
+            }}
+          >
+            {t('close_map', locale)}
+          </div>
         </div>
       </div>
 

@@ -391,6 +391,65 @@ export const PREVIEW_GROUPS: PreviewGroup[] = [
     ],
   },
 
+  // ── TACTICAL MAP ─────────────────────────────────────────────────────────────
+  {
+    label: 'TACTICAL MAP',
+    variants: [
+      {
+        label: 'Forest Battle',
+        frame: {
+          id: 'tactical-1', type: 'tactical-map' as const, hud: HUD,
+          panels: [],
+          tacticalMapData: {
+            mapImageUrl: '',
+            gridCols: 10,
+            gridRows: 7,
+            tokens: [
+              { id: 'player', type: 'player' as const, label: 'Hero', icon: '\uD83E\uDDD9', col: 1, row: 3, hp: 20, maxHp: 20, attack: 14, defense: 12, moveRange: 4, attackRange: 1, hasActed: false, hasMoved: false, statusEffects: [] },
+              { id: 'enemy1', type: 'enemy' as const, label: 'Guard', icon: '\u2694\uFE0F', col: 7, row: 2, hp: 15, maxHp: 15, attack: 12, defense: 11, moveRange: 3, attackRange: 1, aiPattern: 'aggressive' as const, hasActed: false, hasMoved: false, statusEffects: [] },
+              { id: 'enemy2', type: 'enemy' as const, label: 'Archer', icon: '\uD83C\uDFF9', col: 8, row: 5, hp: 10, maxHp: 10, attack: 10, defense: 10, moveRange: 2, attackRange: 3, aiPattern: 'defensive' as const, hasActed: false, hasMoved: false, statusEffects: [] },
+              { id: 'obj1', type: 'objective' as const, label: 'Chest', icon: '\uD83D\uDCE6', col: 9, row: 3, hp: 1, maxHp: 1, attack: 0, defense: 0, moveRange: 0, attackRange: 0, hasActed: false, hasMoved: false, statusEffects: [] },
+            ],
+            terrain: [
+              { col: 3, row: 1, type: 'blocked' as const, icon: '\uD83C\uDF32' },
+              { col: 3, row: 2, type: 'blocked' as const, icon: '\uD83C\uDF32' },
+              { col: 5, row: 4, type: 'cover' as const, icon: '\uD83E\uDEA8' },
+              { col: 6, row: 3, type: 'difficult' as const, icon: '\uD83D\uDCA7' },
+            ],
+            combat: { round: 1, phase: 'player' as const, turnOrder: ['player', 'enemy1', 'enemy2'], activeTokenId: 'player', log: ['Combat begins!', 'Your turn.'], isComplete: false },
+            rules: { playerMoveRange: 4, playerAttackRange: 1, showGrid: true },
+          },
+        },
+      },
+      {
+        label: 'Near Victory',
+        frame: {
+          id: 'tactical-2', type: 'tactical-map' as const, hud: HUD,
+          panels: [],
+          tacticalMapData: {
+            mapImageUrl: '',
+            gridCols: 10,
+            gridRows: 7,
+            tokens: [
+              { id: 'player', type: 'player' as const, label: 'Hero', icon: '\uD83E\uDDD9', col: 1, row: 3, hp: 20, maxHp: 20, attack: 14, defense: 12, moveRange: 4, attackRange: 1, hasActed: false, hasMoved: false, statusEffects: [] },
+              { id: 'enemy1', type: 'enemy' as const, label: 'Guard', icon: '\u2694\uFE0F', col: 7, row: 2, hp: 2, maxHp: 15, attack: 12, defense: 11, moveRange: 3, attackRange: 1, aiPattern: 'aggressive' as const, hasActed: false, hasMoved: false, statusEffects: [] },
+              { id: 'enemy2', type: 'enemy' as const, label: 'Archer', icon: '\uD83C\uDFF9', col: 8, row: 5, hp: 1, maxHp: 10, attack: 10, defense: 10, moveRange: 2, attackRange: 3, aiPattern: 'defensive' as const, hasActed: false, hasMoved: false, statusEffects: [] },
+              { id: 'obj1', type: 'objective' as const, label: 'Chest', icon: '\uD83D\uDCE6', col: 9, row: 3, hp: 1, maxHp: 1, attack: 0, defense: 0, moveRange: 0, attackRange: 0, hasActed: false, hasMoved: false, statusEffects: [] },
+            ],
+            terrain: [
+              { col: 3, row: 1, type: 'blocked' as const, icon: '\uD83C\uDF32' },
+              { col: 3, row: 2, type: 'blocked' as const, icon: '\uD83C\uDF32' },
+              { col: 5, row: 4, type: 'cover' as const, icon: '\uD83E\uDEA8' },
+              { col: 6, row: 3, type: 'difficult' as const, icon: '\uD83D\uDCA7' },
+            ],
+            combat: { round: 3, phase: 'player' as const, turnOrder: ['player', 'enemy1', 'enemy2'], activeTokenId: 'player', log: ['Round 3 begins.', 'Guard is barely standing.', 'Archer is on their last legs.', 'Finish them!'], isComplete: false },
+            rules: { playerMoveRange: 4, playerAttackRange: 1, showGrid: true },
+          },
+        },
+      },
+    ],
+  },
+
   // ── MAP ───────────────────────────────────────────────────────────────────────
   {
     label: 'MAP',
@@ -403,6 +462,7 @@ export const PREVIEW_GROUPS: PreviewGroup[] = [
           mapData: {
             backgroundAsset: 'bg_city',
             currentLocationId: 'harbor',
+            level: 'region' as const,
             locations: [
               { id: 'harbor', label: 'Harbor District', x: 22, y: 68, accessible: true, visited: true, description: 'Where your investigation began.' },
               { id: 'downtown', label: 'Downtown', x: 52, y: 28, accessible: true, visited: false, description: 'Corporate towers and dirty money.' },
@@ -421,11 +481,56 @@ export const PREVIEW_GROUPS: PreviewGroup[] = [
           mapData: {
             backgroundAsset: 'bg_hangar',
             currentLocationId: 'hangar',
+            level: 'region' as const,
             locations: [
               { id: 'hangar', label: 'Hangar Bay', x: 50, y: 72, accessible: true, visited: true },
               { id: 'bridge', label: 'Bridge', x: 50, y: 20, accessible: true, visited: false },
               { id: 'medbay', label: 'Med Bay', x: 22, y: 45, accessible: true, visited: true, description: 'Elara is here.' },
               { id: 'cargo', label: 'Cargo Hold', x: 78, y: 45, accessible: false, visited: false, description: 'Sealed — power failure.' },
+            ],
+          },
+        },
+      },
+    ],
+  },
+
+  // ── LAYERED MAP ─────────────────────────────────────────────────────────────
+  {
+    label: 'LAYERED MAP',
+    variants: [
+      {
+        label: 'Region Map',
+        frame: {
+          id: 'layered-region', type: 'map' as const, hud: HUD,
+          panels: [{ id: 'center' as const, backgroundAsset: 'bg_city' }],
+          mapData: {
+            backgroundAsset: 'bg_city',
+            currentLocationId: 'town',
+            level: 'region' as const,
+            locations: [
+              { id: 'town', label: 'Town', x: 20, y: 40, accessible: true, visited: true, description: 'A quiet trading town on the river.' },
+              { id: 'forest', label: 'Dark Forest', x: 50, y: 30, accessible: true, visited: false, description: 'Ancient woods teeming with creatures.' },
+              { id: 'dungeon', label: 'Dungeon Entrance', x: 72, y: 60, accessible: true, visited: false, description: 'A crumbling stairway leading underground.' },
+              { id: 'castle', label: 'Ruined Castle', x: 85, y: 20, accessible: false, visited: false, description: 'Sealed by dark magic. A key is needed.' },
+            ],
+          },
+        },
+      },
+      {
+        label: 'Area Map',
+        frame: {
+          id: 'layered-area', type: 'map' as const, hud: HUD,
+          panels: [{ id: 'center' as const, backgroundAsset: 'bg_city' }],
+          mapData: {
+            backgroundAsset: 'bg_city',
+            currentLocationId: 'entrance',
+            level: 'area' as const,
+            locations: [
+              { id: 'entrance', label: 'Dungeon Entrance', x: 15, y: 50, accessible: true, visited: true, description: 'You stand at the threshold.' },
+              { id: 'guard_post', label: 'Guard Post', x: 35, y: 35, accessible: true, visited: false, description: 'Goblin guards block the path.', encounterType: 'combat' as const },
+              { id: 'shrine', label: 'Old Shrine', x: 50, y: 65, accessible: true, visited: false, description: 'A crumbling shrine hums with energy.', encounterType: 'explore' as const },
+              { id: 'prisoner', label: 'Prison Cell', x: 70, y: 40, accessible: true, visited: false, description: 'Someone is calling for help.', encounterType: 'dialogue' as const },
+              { id: 'boss_room', label: 'Boss Chamber', x: 88, y: 50, accessible: false, visited: false, description: 'Sealed. Defeat the guards first.', encounterType: 'combat' as const },
             ],
           },
         },

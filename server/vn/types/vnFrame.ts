@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /** The layout type of a VN frame, determines which React component renders it. */
-export const FrameTypeSchema = z.enum(['full-screen', 'dialogue', 'three-panel', 'choice', 'battle', 'transition', 'skill-check', 'inventory', 'map', 'character-sheet']);
+export const FrameTypeSchema = z.enum(['full-screen', 'dialogue', 'three-panel', 'choice', 'battle', 'transition', 'skill-check', 'inventory', 'map', 'character-sheet', 'tactical-map']);
 export type FrameType = z.infer<typeof FrameTypeSchema>;
 
 /** Visual effects applied to a frame or panel. Auto-cleared after durationMs. */
@@ -132,6 +132,8 @@ export const VNFrameSchema = z.object({
   mapData: z.object({
     backgroundAsset: z.string().describe('Asset key for map background image'),
     currentLocationId: z.string().describe('ID of where player currently is'),
+    /** Map hierarchy level: region = world overview, area = detailed local layout with encounter nodes. */
+    level: z.enum(['region', 'area']).default('region'),
     locations: z.array(z.object({
       id: z.string(),
       label: z.string(),
@@ -140,6 +142,8 @@ export const VNFrameSchema = z.object({
       accessible: z.boolean(),
       visited: z.boolean().optional(),
       description: z.string().optional(),
+      /** What happens when the player enters this location. combat → triggers initCombatTool. */
+      encounterType: z.enum(['combat', 'dialogue', 'explore']).optional(),
     })),
   }).optional(),
   /** Full character sheet — for type='character-sheet'. */
@@ -157,6 +161,52 @@ export const VNFrameSchema = z.object({
       description: z.string(),
       icon: z.string().optional(),
     })).optional(),
+  }).optional(),
+  /** Tactical combat map — for type='tactical-map'. */
+  tacticalMapData: z.object({
+    mapImageUrl: z.string().describe('base64 data URL or https URL for the generated map image'),
+    gridCols: z.number().default(12),
+    gridRows: z.number().default(8),
+    tokens: z.array(z.object({
+      id: z.string(),
+      type: z.enum(['player', 'enemy', 'ally', 'objective', 'npc']),
+      label: z.string(),
+      icon: z.string().describe('emoji icon'),
+      portraitAsset: z.string().optional(),
+      col: z.number(),
+      row: z.number(),
+      hp: z.number(),
+      maxHp: z.number(),
+      attack: z.number().default(4),
+      defense: z.number().default(10),
+      moveRange: z.number().default(3),
+      attackRange: z.number().default(1),
+      aiPattern: z.enum(['aggressive', 'defensive', 'patrol', 'guard-objective']).optional(),
+      patrolPath: z.array(z.object({ col: z.number(), row: z.number() })).optional(),
+      hasActed: z.boolean().default(false),
+      hasMoved: z.boolean().default(false),
+      statusEffects: z.array(z.string()).default([]),
+    })),
+    terrain: z.array(z.object({
+      col: z.number(),
+      row: z.number(),
+      type: z.enum(['blocked', 'difficult', 'hazard', 'cover']),
+      icon: z.string().optional(),
+    })).default([]),
+    combat: z.object({
+      round: z.number().default(1),
+      phase: z.enum(['player', 'enemy', 'cutscene']).default('player'),
+      turnOrder: z.array(z.string()).default([]),
+      activeTokenId: z.string(),
+      log: z.array(z.string()).default([]),
+      isComplete: z.boolean().default(false),
+      result: z.enum(['victory', 'defeat', 'escape']).optional(),
+    }),
+    rules: z.object({
+      playerMoveRange: z.number().default(4),
+      playerAttackRange: z.number().default(1),
+      showGrid: z.boolean().default(true),
+    }).default({ playerMoveRange: 4, playerAttackRange: 1, showGrid: true }),
   }).optional(),
   /**
    * Internal metadata used by agents to track narrative position.

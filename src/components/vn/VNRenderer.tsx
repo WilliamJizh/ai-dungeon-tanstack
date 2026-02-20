@@ -27,6 +27,7 @@ import { BattleFrame } from './frames/BattleFrame';
 import { SkillCheckFrame } from './frames/SkillCheckFrame';
 import { InventoryFrame }  from './frames/InventoryFrame';
 import { MapFrame }        from './frames/MapFrame';
+import { TacticalMapFrame } from './frames/TacticalMapFrame';
 
 /* ── Pulsing dots CSS (injected once) ────────────────────────────────────── */
 const PULSE_STYLE_ID = 'vn-pulse-dots';
@@ -218,6 +219,20 @@ export function VNRenderer({
         return <InventoryFrame {...frameProps} />;
       case 'map':
         return <MapFrame {...frameProps} />;
+      case 'tactical-map':
+        return (
+          <TacticalMapFrame
+            frame={displayFrame}
+            pack={pack}
+            onCombatComplete={(result, summary) => {
+              setCurrentIndex(frames.length);
+              onPlayerAction(`[combat-result] ${result} ${JSON.stringify({ summary, round: (displayFrame as any).tacticalMapData?.combat?.round })}`);
+            }}
+            onFreeText={(text, stateJson) => {
+              onPlayerAction(`[combat-freetext][state:${stateJson}] ${text}`);
+            }}
+          />
+        );
       case 'character-sheet':
         return <FullScreenFrame {...frameProps} />;
       case 'transition':
