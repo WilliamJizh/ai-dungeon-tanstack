@@ -1,1 +1,23 @@
 @import "tailwindcss";
+
+/* ── VN Engine Effects ── */
+@keyframes vn-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-8px); }
+  40% { transform: translateX(8px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(4px); }
+}
+.vn-effect-shake {
+  animation: vn-shake 0.4s ease-in-out;
+}
+.vn-effect-scan-lines {
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.15) 2px,
+    rgba(0, 0, 0, 0.15) 4px
+  );
+  pointer-events: none;
+}

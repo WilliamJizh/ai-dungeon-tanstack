@@ -7,9 +7,19 @@ import {
 } from '@tanstack/react-router'
 import { GamePreviewPage } from './pages/GamePreviewPage'
 import { BattleScenePage } from './pages/BattleScenePage'
+import { VNBuildPage } from './pages/VNBuildPage'
+import { VNEnginePage } from './pages/VNEnginePage'
+import { VNProjectsPage } from './pages/VNProjectsPage'
+import { VNFramePreviewPage } from './pages/VNFramePreviewPage'
+import { TraceDebugPage } from './pages/TraceDebugPage'
+import { VNProvider } from './context/VNContext'
 
 const rootRoute = createRootRoute({
-  component: Outlet,
+  component: () => (
+    <VNProvider>
+      <Outlet />
+    </VNProvider>
+  ),
 })
 
 function Index() {
@@ -44,7 +54,37 @@ const battleRoute = createRoute({
   component: BattleScenePage,
 })
 
-const routeTree = rootRoute.addChildren([indexRoute, previewRoute, battleRoute])
+const vnPlanRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/vn',
+  component: VNBuildPage,
+})
+
+const vnPlayRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/vn/play',
+  component: VNEnginePage,
+})
+
+const vnProjectsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/vn/projects',
+  component: VNProjectsPage,
+})
+
+const vnFramePreviewRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/vn/frames',
+  component: VNFramePreviewPage,
+})
+
+const debugTracesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/debug/traces',
+  component: TraceDebugPage,
+})
+
+const routeTree = rootRoute.addChildren([indexRoute, previewRoute, battleRoute, vnPlanRoute, vnPlayRoute, vnProjectsRoute, vnFramePreviewRoute, debugTracesRoute])
 
 export const router = createRouter({ routeTree })
 
