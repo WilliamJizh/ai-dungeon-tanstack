@@ -66,6 +66,10 @@ export const aiTraces = sqliteTable('ai_traces', {
   inputJson: text('input_json').notNull(),
   outputJson: text('output_json'),
   metaJson: text('meta_json').notNull().default('{}'),
+  /** JSON array of category tags e.g. '["image-gen","scene"]' — for filtering. */
+  tags: text('tags'),
+  /** Call origin e.g. 'imageAgent.generateSceneImage' — for filtering. */
+  source: text('source'),
 });
 
 /**

@@ -1,6 +1,6 @@
 import 'dotenv/config'
 import { writeFileSync } from 'fs'
-import { generateSceneImage } from '../server/agents/imageAgent.js'
+import { generateSceneImage } from '../server/lib/imageGen.js'
 
 console.log('Testing image generation...')
 const result = await generateSceneImage(

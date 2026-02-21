@@ -3,6 +3,9 @@ import type { VNFrame } from '../../../../server/vn/types/vnFrame';
 import type { VNPackage } from '../../../../server/vn/types/vnTypes';
 import { resolveAsset } from '../../../lib/resolveAsset';
 import { useTypewriter } from '../hooks/useTypewriter';
+import { FONT_MAIN } from '../../../lib/fonts';
+import { t } from '../../../lib/i18n';
+import { useLocale } from '../../../context/LocaleContext';
 
 interface FullScreenFrameProps {
   frame: VNFrame;
@@ -25,6 +28,7 @@ interface FullScreenFrameProps {
  * - Font: VT323
  */
 export function FullScreenFrame({ frame, pack, onAdvance, isMuted, onToggleMute }: FullScreenFrameProps) {
+  const { locale } = useLocale();
   const panel = frame.panels[0];
   const isDimmed = panel?.dimmed !== false; // atmospheric by default; false = prominent character
   const bg = resolveAsset(panel?.backgroundAsset, pack);
@@ -75,7 +79,7 @@ export function FullScreenFrame({ frame, pack, onAdvance, isMuted, onToggleMute 
         width: '100%',
         height: '100%',
         background: '#000',
-        fontFamily: "VT323, 'Courier New', monospace",
+        fontFamily: FONT_MAIN,
         overflow: 'hidden',
         cursor: 'default',
       }}
@@ -105,12 +109,12 @@ export function FullScreenFrame({ frame, pack, onAdvance, isMuted, onToggleMute 
           {frame.hud.showNav && (
             <div style={{ display: 'flex', gap: 20 }}>
               {['[ESC]', 'SAVE', 'LOAD', 'LOG', 'AUTO'].map(label => (
-                <button key={label} onClick={() => {}} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, letterSpacing: '.1em', color: 'rgba(255,255,255,.16)', fontFamily: "VT323,'Courier New',monospace", padding: 0 }}>
+                <button key={label} onClick={() => {}} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, letterSpacing: '.1em', color: 'rgba(255,255,255,.16)', fontFamily: FONT_MAIN, padding: 0 }}>
                   {label}
                 </button>
               ))}
-              <button onClick={(e) => { e.stopPropagation(); onToggleMute?.(); }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, letterSpacing: '.1em', color: 'rgba(255,255,255,.45)', fontFamily: "VT323,'Courier New',monospace", padding: 0 }}>
-                {isMuted ? '[MUTED]' : '[SND]'}
+              <button onClick={(e) => { e.stopPropagation(); onToggleMute?.(); }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, letterSpacing: '.1em', color: 'rgba(255,255,255,.45)', fontFamily: FONT_MAIN, padding: 0 }}>
+                {isMuted ? t('muted', locale) : t('sound', locale)}
               </button>
             </div>
           )}
@@ -193,7 +197,7 @@ export function FullScreenFrame({ frame, pack, onAdvance, isMuted, onToggleMute 
                   textAlign: 'left',
                 }}
               >
-                NARRATOR
+                {t('narrator', locale)}
               </div>
               <p
                 style={{
@@ -281,11 +285,11 @@ export function FullScreenFrame({ frame, pack, onAdvance, isMuted, onToggleMute 
             fontSize: 13,
             letterSpacing: '.12em',
             color: 'rgba(255,255,255,.28)',
-            fontFamily: "VT323, 'Courier New', monospace",
+            fontFamily: FONT_MAIN,
             cursor: 'pointer',
           }}
         >
-          [SPACE] &nbsp;NEXT
+          {t('next_hint', locale)}
         </button>
       </div>
     </div>

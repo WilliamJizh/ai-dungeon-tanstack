@@ -1,27 +1,31 @@
 import { useRef, useEffect, useState } from 'react';
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport, isToolUIPart } from 'ai';
+import type { FileUIPart } from 'ai';
 import type { PlanningUIMessage } from '../../../server/vn/agents/planningChatAgent';
+import type { Locale } from '../../lib/i18n';
 import { ToolCallWidget } from './ToolCallWidget';
+import { FONT_MAIN as font } from '../../lib/fonts';
 
 interface ChatPanelProps {
   sessionId: string;
+  locale: Locale;
   onMessagesChange?: (messages: PlanningUIMessage[]) => void;
 }
-
-const font = "VT323,'Courier New',monospace";
 const faint = 'rgba(255,255,255,.06)';
 const subtle = 'rgba(255,255,255,.18)';
 const gold = 'rgba(255,198,70,.85)';
 
-export function ChatPanel({ sessionId, onMessagesChange }: ChatPanelProps) {
+export function ChatPanel({ sessionId, locale, onMessagesChange }: ChatPanelProps) {
   const [input, setInput] = useState('');
+  const [stagedFiles, setStagedFiles] = useState<FileList | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const { messages, sendMessage, status } = useChat<PlanningUIMessage>({
     transport: new DefaultChatTransport({
       api: '/api/vn/chat',
-      body: () => ({ sessionId }),
+      body: () => ({ sessionId, locale }),
     }),
   });
 
@@ -40,9 +44,11 @@ export function ChatPanel({ sessionId, onMessagesChange }: ChatPanelProps) {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const text = input.trim();
-    if (!text || isStreaming) return;
-    sendMessage({ text });
+    if ((!text && !stagedFiles?.length) || isStreaming) return;
+    sendMessage({ text: text || undefined, files: stagedFiles ?? undefined } as Parameters<typeof sendMessage>[0]);
     setInput('');
+    setStagedFiles(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -51,6 +57,8 @@ export function ChatPanel({ sessionId, onMessagesChange }: ChatPanelProps) {
       handleSubmit(e as unknown as React.FormEvent);
     }
   };
+
+  const stagedPreviews = stagedFiles ? Array.from(stagedFiles).map(f => URL.createObjectURL(f)) : [];
 
   return (
     <div
@@ -95,6 +103,8 @@ export function ChatPanel({ sessionId, onMessagesChange }: ChatPanelProps) {
 
         {messages.map((msg) => {
           if (msg.role === 'user') {
+            const fileParts = msg.parts.filter((p): p is FileUIPart => p.type === 'file');
+            const textParts = msg.parts.filter(p => p.type === 'text');
             return (
               <div key={msg.id} style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
                 <div
@@ -110,7 +120,24 @@ export function ChatPanel({ sessionId, onMessagesChange }: ChatPanelProps) {
                     letterSpacing: '.04em',
                   }}
                 >
-                  {msg.parts.map((part, i) =>
+                  {fileParts.length > 0 && (
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: textParts.length > 0 ? 8 : 0 }}>
+                      {fileParts.map((p, i) => (
+                        <img
+                          key={i}
+                          src={p.url}
+                          alt={p.filename ?? 'reference'}
+                          style={{
+                            height: 72,
+                            borderRadius: 3,
+                            border: `1px solid ${subtle}`,
+                            objectFit: 'cover',
+                          }}
+                        />
+                      ))}
+                    </div>
+                  )}
+                  {textParts.map((part, i) =>
                     part.type === 'text' ? <span key={i}>{part.text}</span> : null
                   )}
                 </div>
@@ -179,7 +206,71 @@ export function ChatPanel({ sessionId, onMessagesChange }: ChatPanelProps) {
           background: 'rgba(0,0,0,.4)',
         }}
       >
+        {/* Staged image previews */}
+        {stagedPreviews.length > 0 && (
+          <div style={{ display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
+            {stagedPreviews.map((src, i) => (
+              <div key={i} style={{ position: 'relative' }}>
+                <img
+                  src={src}
+                  alt="staged"
+                  style={{ height: 56, borderRadius: 3, border: `1px solid rgba(255,198,70,.4)`, objectFit: 'cover' }}
+                />
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={() => { setStagedFiles(null); if (fileInputRef.current) fileInputRef.current.value = ''; }}
+              style={{
+                background: 'none',
+                border: `1px solid ${subtle}`,
+                borderRadius: 3,
+                padding: '0 8px',
+                color: subtle,
+                fontFamily: font,
+                fontSize: 11,
+                cursor: 'pointer',
+                alignSelf: 'center',
+              }}
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+          {/* Hidden file input */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            style={{ display: 'none' }}
+            onChange={e => setStagedFiles(e.target.files)}
+          />
+
+          {/* Attach button */}
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isStreaming}
+            title="Attach reference image"
+            style={{
+              background: 'none',
+              border: `1px solid ${stagedFiles?.length ? 'rgba(255,198,70,.4)' : subtle}`,
+              borderRadius: 3,
+              padding: '8px 10px',
+              color: stagedFiles?.length ? gold : subtle,
+              fontFamily: font,
+              fontSize: 16,
+              cursor: isStreaming ? 'not-allowed' : 'pointer',
+              lineHeight: 1,
+              opacity: isStreaming ? .5 : 1,
+            }}
+          >
+            ⊕
+          </button>
+
           <textarea
             value={input}
             onChange={e => setInput(e.target.value)}
@@ -205,17 +296,17 @@ export function ChatPanel({ sessionId, onMessagesChange }: ChatPanelProps) {
           />
           <button
             type="submit"
-            disabled={isStreaming || !input.trim()}
+            disabled={isStreaming || (!input.trim() && !stagedFiles?.length)}
             style={{
               background: 'none',
-              border: `1px solid ${isStreaming || !input.trim() ? subtle : 'rgba(255,198,70,.4)'}`,
+              border: `1px solid ${isStreaming || (!input.trim() && !stagedFiles?.length) ? subtle : 'rgba(255,198,70,.4)'}`,
               borderRadius: 3,
               padding: '8px 14px',
               fontSize: 13,
               letterSpacing: '.16em',
-              color: isStreaming || !input.trim() ? subtle : gold,
+              color: isStreaming || (!input.trim() && !stagedFiles?.length) ? subtle : gold,
               fontFamily: font,
-              cursor: isStreaming || !input.trim() ? 'not-allowed' : 'pointer',
+              cursor: isStreaming || (!input.trim() && !stagedFiles?.length) ? 'not-allowed' : 'pointer',
               whiteSpace: 'nowrap',
               transition: 'color .15s, border-color .15s',
             }}

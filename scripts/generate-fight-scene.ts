@@ -3,7 +3,7 @@ import { mkdirSync, writeFileSync } from 'fs'
 import {
   generateSceneImage,
   generateCharacterImage,
-} from '../server/agents/imageAgent.js'
+} from '../server/lib/imageGen.js'
 
 const STYLE =
   'Craig Mullins concept art style, loose expressive oil paint brushstrokes, thick gestural paint texture, dramatic cinematic chiaroscuro lighting, strong value contrast deep shadows and brilliant highlights, muted earthy tones with warm amber and deep teal accents, slightly realistic proportions, atmospheric depth and haze, professional digital matte painting'

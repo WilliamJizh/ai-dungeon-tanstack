@@ -6,52 +6,119 @@ The VN Engine is a two-phase system built on top of the AI Dungeon project. It u
 
 ### Two Phases
 
-1. **Plan Phase** -- The Planning Agent researches context (via web search), creates a full story structure, generates all visual and audio assets, and produces a `VNPackage` (game manifest).
-2. **Story Phase** -- The Storyteller Agent handles player input each turn, calls tools to build `VNFrame[]` sequences, and maintains plot integrity through beat tracking.
+1. **Plan Phase** — The Planning Agent researches context (via Google Search grounding), creates a full story structure, generates all visual and audio assets, and produces a `VNPackage` (game manifest).
+2. **Story Phase** — The Storyteller Agent handles player input each turn, calls tools to build `VNFrame[]` sequences, and maintains plot integrity through beat tracking.
 
 ### Architecture
 
 - **Backend**: Fastify server with SSE streaming, SQLite persistence (Drizzle ORM)
 - **Frontend**: React + TanStack Router, pure JSON consumer (no agent logic in the client)
-- **AI Framework**: Vercel AI SDK v6 (`ai`, `@ai-sdk/google`, `@ai-sdk/react`)
-- **Search**: Native Google Search grounding via `google.tools.googleSearch({})` from `@ai-sdk/google`
+- **AI Framework**: Vercel AI SDK v5 (`ai`, `@ai-sdk/google`)
+- **Model**: Gemini (configurable via `GEMINI_STORY_MODEL` / `GEMINI_TEXT_MODEL` env vars)
 - **Assets**: File-based (PNG images, PCM audio) served by `@fastify/static`
+- **Image generation**: Gemini Imagen via `server/agents/imageAgent.ts`
 
 ---
 
-## 2. VNFrame Contract
+## 2. Frame Registry
+
+**Source of truth**: Two registry files — intentionally separate (server doesn't need React; client doesn't need AI docs).
+
+```
+server/vn/frameRegistry.ts    ← agent docs, requiresNarration flag, dataField names
+src/lib/frameRegistry.tsx      ← React component map + resolveFrameEntry()
+```
+
+### Why a Registry?
+
+Adding a new frame type previously required 5+ scattered file edits with duplicated information. The registry pattern consolidates this to a 4-step process with TypeScript enforcement.
+
+### `server/vn/frameRegistry.ts`
+
+```ts
+interface FrameRegistryEntry {
+  type: FrameType;
+  agentSummary: string;      // one-liner in the "FRAME TYPES" agent prompt section
+  agentWorkflow?: string;    // multi-line in "INTERACTIVE GAMEPLAY FRAMES"; SESSION_ID placeholder
+  requiresNarration?: boolean; // inject '...' fallback when both dialogue+narration absent
+  dataField?: string;        // VNFrame property name for this type's payload
+}
+```
+
+`FRAME_REGISTRY_MAP` provides O(1) lookup and is used in `frameBuilderTool.ts` for narration injection.
+
+`agentWorkflow` strings use the literal `SESSION_ID` as a placeholder; `buildDMSystemPrompt` replaces it at prompt-build time via `.replace(/SESSION_ID/g, sessionId)`.
+
+### `src/lib/frameRegistry.tsx`
+
+```ts
+interface ClientFrameEntry {
+  component: ComponentType<any>;
+  makeProps?: (base: BaseFrameProps) => Record<string, unknown>;
+}
+
+// Record<FrameType, ClientFrameEntry> — TypeScript errors if any FrameType is missing
+const CLIENT_FRAME_REGISTRY: Record<FrameType, ClientFrameEntry>
+```
+
+`resolveFrameEntry(frame)` handles the `dialogue → FullScreenFrame` fallback for center-target dialogue. All renderers call this instead of a hardcoded switch.
+
+**`tactical-map`** is always handled by an explicit branch in renderers (`VNRenderer.tsx`, `VNFramePreviewPage.tsx`) because its `onCombatComplete` and `onFreeText` callbacks require closures over renderer state (`setCurrentIndex`, `frames.length`) that don't fit `BaseFrameProps`.
+
+### Adding a New Frame Type
+
+| Step | File | Notes |
+|------|------|-------|
+| 1 | `server/vn/types/vnFrame.ts` | Add to `FrameTypeSchema` enum + optional Zod data field |
+| 2 | `server/vn/frameRegistry.ts` | Add one `FrameRegistryEntry` with `agentSummary` + optional workflow |
+| 3 | `src/lib/frameRegistry.tsx` | Add one entry — TypeScript errors if missing from `Record<FrameType, ...>` |
+| 4 | `src/components/vn/frames/NewFrame.tsx` | Create the React component |
+
+---
+
+## 3. VNFrame Contract
 
 **Source of truth**: `server/vn/types/vnFrame.ts`
 
 A `VNFrame` is a single screen state in the visual novel. The React renderer selects a layout component based on `frame.type`.
 
-### 6 Layout Types
+### 11 Frame Types
 
-| Type | Component | Panels | Primary Content |
-|------|-----------|--------|-----------------|
-| `full-screen` | FullScreenFrame | 1 (center) | Narration box, atmosphere |
-| `dialogue` | DialogueFrame | 2 (left/right) | Speaker bubble + listener, accordion layout |
-| `three-panel` | ThreePanelFrame | 3 (left/center/right) | Multi-character, center narration |
-| `choice` | ChoiceFrame | 1+ | Choice buttons, optional free-text input |
-| `battle` | BattleFrame | 1 | Player portrait, enemies, combat log, skill grid |
-| `transition` | (CSS transition) | 0 | Crossfade/wipe/black-cut between scenes |
+| Type | Component | Description |
+|------|-----------|-------------|
+| `full-screen` | FullScreenFrame | Atmosphere, dramatic reveals, location shots. 1 panel (`center`). |
+| `dialogue` | DialogueFrame | Character speaks. 2 panels: speaker (62%, undimmed) + listener (38%, dimmed). Falls back to FullScreenFrame for center-target dialogue. |
+| `three-panel` | ThreePanelFrame | 3+ characters on screen. 3 panels: `left`, `center`, `right`. |
+| `choice` | ChoiceFrame | Decision point. 2–4 choices + optional free-text input. |
+| `battle` | BattleFrame | Legacy turn UI. Includes player, enemies, combat log, skill grid. |
+| `transition` | FullScreenFrame | Scene/time change. `panels: []` (empty). Rendered as FullScreenFrame. |
+| `skill-check` | SkillCheckFrame | Dice roll outcome. Data in `skillCheck` field. |
+| `inventory` | InventoryFrame | Item inventory display. Data in `inventoryData` field. |
+| `map` | MapFrame | Location map with clickable nodes. Supports region/area hierarchy. Data in `mapData`. |
+| `character-sheet` | FullScreenFrame | Full character stats. Data in `characterSheet`. Rendered as FullScreenFrame. |
+| `tactical-map` | TacticalMapFrame | Turn-based tactical combat grid. Data in `tacticalMapData`. Explicit branch in renderer. |
 
 ### VNFrame Fields
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `id` | string | Yes | Unique frame identifier |
+| `id` | string | Yes | Unique frame identifier (descriptive slug) |
 | `type` | FrameType | Yes | Layout type enum |
-| `hud` | object | No | `{ chapter, scene, showNav }` -- top bar overlay |
+| `hud` | object | No | `{ chapter, scene, showNav }` — top bar overlay |
 | `panels` | VNPanel[] | Yes | Visual panels (can be empty for transitions) |
 | `dialogue` | object | No | `{ speaker, text, targetPanel, isNarrator?, position? }` |
-| `narration` | object | No | `{ text, panelId? }` -- no speaker attribution |
+| `narration` | object | No | `{ text, panelId? }` — no speaker attribution |
 | `choices` | Choice[] | No | `{ id, text, hint? }` array |
 | `showFreeTextInput` | boolean | No | Show free-text input below choices |
 | `battle` | object | No | Player, enemies, combatLog, skills, round |
 | `effects` | VNEffect[] | No | Visual effects to apply on render |
 | `audio` | object | No | `{ musicAsset?, fadeIn?, stopMusic? }` |
 | `transition` | object | No | `{ type, durationMs, titleCard? }` |
+| `skillCheck` | object | No | `{ stat, statValue, difficulty, roll, modifier, total, succeeded, description }` |
+| `inventoryData` | object | No | `{ items[], mode, prompt? }` |
+| `mapData` | object | No | `{ backgroundAsset, currentLocationId, level, locations[] }` |
+| `characterSheet` | object | No | `{ playerName, level, hp, maxHp, attributes, skills, statusEffects }` |
+| `tacticalMapData` | object | No | Full combat state — see Tactical Combat section |
 | `_meta` | object | No | Internal agent metadata (stripped before client delivery) |
 
 ### VNPanel Fields
@@ -67,7 +134,186 @@ A `VNFrame` is a single screen state in the visual novel. The React renderer sel
 
 ---
 
-## 3. VNPackage Structure
+## 4. Interactive Gameplay Frames
+
+These frame types add non-dialogue interactions. The agent is instructed to alternate between narrative frames and these gameplay frames (no more than 3 consecutive pure-narrative frames).
+
+### skill-check
+
+Used when the player attempts something risky or uncertain.
+
+1. Agent reads player stats via `playerStatsTool({ action: "read", sessionId })`
+2. Agent picks attribute (strength/dexterity/intelligence/luck/charisma)
+3. Computes: `modifier = floor((attr - 10) / 2)`, `roll = 1–20`, `total = roll + modifier`
+4. Sets DC: easy=8, moderate=12, hard=16, very hard=20
+5. Builds frame with `skillCheck: { stat, statValue, difficulty, roll, modifier, total, succeeded: total >= DC, description }`
+6. Follows with narrative frames reacting to success/failure
+7. If HP changes, calls `playerStatsTool({ action: "update", updates: { hp } })`
+
+### inventory
+
+Used when player finds an item, opens their pack, or needs to choose an item.
+
+- **Give item**: `playerStatsTool({ action: "addItem", item: { id, name, description, icon, quantity: 1 } })`
+- **Show inventory**: frame with `inventoryData` from a read call; `mode="view"` or `mode="select"`
+
+### map
+
+Used for navigation between locations.
+
+```ts
+mapData: {
+  backgroundAsset: string,     // key into AssetPack.backgrounds
+  currentLocationId: string,
+  level: 'region' | 'area',    // see Layered Map below
+  locations: [{
+    id, label,
+    x: number,   // 0-100 as % of frame width
+    y: number,   // 0-100 as % of frame height
+    accessible: boolean,
+    visited?: boolean,
+    description?: string,
+    encounterType?: 'combat' | 'dialogue' | 'explore',
+  }]
+}
+```
+
+`MapFrame.tsx` supports pointer-drag panning (±300px), location node clicks, and encounter type icons (⚔️ combat, 💬 dialogue, 🔍 explore).
+
+### Layered Map System
+
+The map hierarchy flows: **Region Map → Area Map → Tactical Combat**
+
+1. **Region Map** (`level='region'`): World overview. Locations are major areas (cities, forests, dungeons). Player clicks to choose destination.
+2. **Area Map** (`level='area'`): Detailed local layout. Locations are specific points with `encounterType`. Player clicks to engage.
+3. **Combat** (`encounterType='combat'`): When player selects a combat node, the agent calls `initCombatTool`, passes frameData to `frameBuilderTool`, and yields via `yieldToPlayer({ waitingFor: 'combat-result' })`.
+
+---
+
+## 5. Tactical Combat System
+
+### Overview
+
+Turn-based combat on a top-down SVG grid. The agent initiates combat and waits for the result; the client runs all combat logic client-side.
+
+```
+Agent calls initCombatTool
+  → saves combat state to SQLite combat_states table
+  → returns frameData with tacticalMapData
+Agent calls frameBuilderTool with that frameData
+Agent calls yieldToPlayer({ waitingFor: 'combat-result' })
+  → client runs combat until end condition
+  → client sends [combat-result] victory/defeat/escape {...}
+Agent continues story based on outcome
+```
+
+For free-text interruption during combat:
+```
+Client sends: [combat-freetext][state:{...}] <text>
+Agent calls combatEventTool to inject events (modify HP, add/remove tokens, etc.)
+Agent calls frameBuilderTool with updated tactical-map frame
+```
+
+### TacticalMapData Schema
+
+```ts
+{
+  mapImageUrl: string,        // base64 data URL from Gemini Imagen
+  gridCols: number,           // default 12
+  gridRows: number,           // default 8
+  tokens: CombatToken[],
+  terrain: TerrainCell[],
+  combat: {
+    round: number,
+    phase: 'player' | 'enemy' | 'cutscene',
+    turnOrder: string[],      // token IDs, player first
+    activeTokenId: string,
+    log: string[],
+    isComplete: boolean,
+    result?: 'victory' | 'defeat' | 'escape',
+  },
+  rules: {
+    playerMoveRange: number,  // default 4
+    playerAttackRange: number, // default 1
+    showGrid: boolean,
+  }
+}
+```
+
+### CombatToken
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `id` | — | Unique token ID |
+| `type` | — | `'player' \| 'enemy' \| 'ally' \| 'objective' \| 'npc'` |
+| `label` | — | Display name |
+| `icon` | — | Emoji icon |
+| `col`, `row` | — | Grid position |
+| `hp`, `maxHp` | — | Health |
+| `attack` | 4 | Attack power |
+| `defense` | 10 | Defense class (DC to hit) |
+| `moveRange` | 3 (4 for player) | Move range in cells (Manhattan distance) |
+| `attackRange` | 1 | Attack range (Chebyshev distance) |
+| `aiPattern` | — | `'aggressive' \| 'defensive' \| 'patrol' \| 'guard-objective'` |
+| `patrolPath` | — | `[{ col, row }]` for patrol pattern |
+| `hasActed`, `hasMoved` | false | Turn state |
+| `statusEffects` | [] | Active status effect IDs |
+
+### TerrainCell
+
+| Type | Effect |
+|------|--------|
+| `blocked` | Cannot enter |
+| `difficult` | Counts as 2 movement points |
+| `hazard` | Damages tokens that enter |
+| `cover` | Reduces hit chance |
+
+### Combat Engine (`src/lib/combat/combatEngine.ts`)
+
+| Function | Algorithm | Description |
+|----------|-----------|-------------|
+| `gridDistance(a, b)` | Chebyshev (max of Δcol, Δrow) | Distance for attack range |
+| `manhattanDistance(a, b)` | \|Δcol\| + \|Δrow\| | Distance for move range |
+| `getReachableCells(token, state)` | BFS up to moveRange (Manhattan) | Cells a token can move to |
+| `getAttackableTargets(token, tokens, terrain)` | Chebyshev ≤ attackRange, not dead, not objective, not same team | Valid attack targets |
+| `resolveAttack(attacker, defender)` | d20 + floor((atk−10)/2) vs defense | Returns `{ roll, modifier, total, hit, damage, log }` |
+| `computeEnemyAction(token, state)` | Pattern-based AI | Returns next move+attack for an enemy token |
+| `checkCombatEnd(tokens)` | All players dead → defeat; all enemies dead → victory | Combat end condition check |
+
+### AI Patterns
+
+| Pattern | Behavior |
+|---------|----------|
+| `aggressive` | Move toward nearest player; attack if in range |
+| `defensive` | Attack if player is adjacent; otherwise hold position |
+| `patrol` | Follow `patrolPath` in order; attack if player is adjacent |
+| `guard-objective` | Stay near nearest objective; attack if player is adjacent |
+
+### TacticalMapFrame (`src/components/vn/frames/TacticalMapFrame.tsx`)
+
+- SVG grid overlaid on the generated map image; responsive via ResizeObserver
+- Token rendering: emoji icon + HP bar (green >50%, yellow >25%, red ≤25%) + pulsing border for active token
+- Interaction modes: `idle` → `move` (blue reachable cells) → `attack` (red targets)
+- Enemy turns: 600ms delay, orange animation, auto-chains
+- Combat log: 120px scrollable panel, last 20 entries
+- Victory/defeat overlay with CONTINUE button
+- Pointer-drag panning on grid background (±200px clamp)
+
+### DB Table
+
+```sql
+CREATE TABLE IF NOT EXISTS combat_states (
+  session_id TEXT PRIMARY KEY,
+  combat_json TEXT NOT NULL DEFAULT '{}',
+  updated_at TEXT NOT NULL
+);
+```
+
+Drizzle schema: `server/db/schema.ts` → `combatStates`
+
+---
+
+## 6. VNPackage Structure
 
 **Source of truth**: `server/vn/types/vnTypes.ts`
 
@@ -81,6 +327,7 @@ The `VNPackage` is the complete game manifest produced by the Planning Agent.
 | `createdAt` | string | ISO 8601 timestamp |
 | `title` | string | Story title |
 | `genre` | string | Story genre |
+| `language` | string | Locale code (`'en'`, `'zh-CN'`, etc.) — all generated text must match |
 | `artStyle` | string | Art style description for image generation |
 | `setting` | `{ world, era, tone }` | World-building metadata |
 | `characters` | Character[] | All characters (min 1) |
@@ -142,73 +389,106 @@ Tracks player position within a session:
 | `completedScenes` | string[] | Scene IDs completed |
 | `flags` | Record | Arbitrary state flags |
 
+### PlayerStats (Runtime)
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `sessionId` | string | — | Active session |
+| `hp`, `maxHp` | number | 20/20 | Hit points |
+| `strength`, `dexterity`, `intelligence`, `luck`, `charisma` | number | 10 | D&D-style attributes |
+| `level` | number | 1 | Player level |
+| `experience` | number | 0 | XP |
+| `gold` | number | 0 | Currency |
+| `inventory` | Item[] | [] | Carried items |
+| `statusEffects` | StatusEffect[] | [] | Active effects |
+| `newPlayerStatus` | string? | — | Freeform narrative status (e.g. "Poisoned by the river spirit") |
+
 ---
 
-## 4. Agent System
+## 7. Agent System
 
-### Planning Agent (3-phase, `server/vn/agents/planningAgent.ts`)
+### Planning Agent (`server/vn/agents/planningChatAgent.ts`)
 
-**Phase 1 -- Research + Story Plan**
-- Uses `generateObject` with `webSearchTool`
-- Up to 5 web searches + 1 final structured output
+**Phase 1 — Research + Story Plan**
+- Uses Google Search grounding for world-building research
 - Produces: title, artStyle, characters[], acts/scenes, asset manifest
 
-**Phase 2 -- Asset Generation (parallel, no LLM)**
+**Phase 2 — Asset Generation (parallel)**
 - Generates all images and music in parallel
 - Saves files to `public/generated/{packageId}/`
-- Returns `AssetRef` URLs for each asset
 
-**Phase 3 -- Package Assembly**
-- Uses `generateObject` to produce final VNPackage structure
-- Attaches assets, id, timestamps
+**Phase 3 — Package Assembly**
+- Attaches assets, id, timestamps, produces final VNPackage
 
-### Storyteller Agent (per-turn, `server/vn/agents/storytellerAgent.ts`)
+### Storyteller Agent (`server/vn/agents/storytellerChatAgent.ts`)
 
-- Uses `generateText` (non-streaming, 5-15s per turn)
-- Tool loop: `plotStateTool` -> `frameBuilderTool` x N -> `sceneCompleteTool?` -> finish
-- Collects frames from tool call results
-- Returns `{ frames, newBeatIndex, sceneComplete, nextSceneId? }`
+Per-turn `ToolLoopAgent` that stops when `yieldToPlayer` or `sceneCompleteTool` is called.
+
+**Turn workflow:**
+1. `plotStateTool` — read `nextBeat`, `exitConditions`, `nudge`
+2. `frameBuilderTool` × 2–5 — build frames covering the current beat
+3. If `exitConditions` met → `sceneCompleteTool` (ends loop)
+4. Otherwise → `yieldToPlayer({ waitingFor: ... })` (ends loop)
+
+**System prompt generation** (`buildDMSystemPrompt`):
+- Frame types section: dynamically generated from `FRAME_REGISTRY.map(e => \`- '${e.type}': ${e.agentSummary}\``)`
+- Interactive gameplay section: dynamically generated from registry entries that have `agentWorkflow`, with `SESSION_ID` replaced by the actual sessionId
 
 ---
 
-## 5. Tools
+## 8. Storyteller Agent Tools
 
 All tools use `tool()` from Vercel AI SDK v5 with Zod parameter schemas.
 
-### Planning Agent Tools
+| Tool | File | Description |
+|------|------|-------------|
+| `plotStateTool` | `server/vn/tools/plotStateTool.ts` | Read narrative state: nextBeat, exitConditions, nudge, completedScenes |
+| `frameBuilderTool` | `server/vn/tools/frameBuilderTool.ts` | Build + validate one VNFrame; normalizes legacy format |
+| `sceneCompleteTool` | `server/vn/tools/sceneCompleteTool.ts` | Mark scene done, return nextSceneId/nextActId |
+| `yieldToPlayerTool` | `server/vn/tools/yieldToPlayerTool.ts` | End the agent loop; `waitingFor: 'choice' \| 'free-text' \| 'continue' \| 'combat-result'` |
+| `playerStatsTool` | `server/vn/tools/playerStatsTool.ts` | `read \| update \| addItem \| removeItem` player stats |
+| `initCombatTool` | `server/vn/tools/initCombatTool.ts` | Init combat: generate map image, set up tokens, save to DB |
+| `combatEventTool` | `server/vn/tools/combatEventTool.ts` | Inject events into active combat (modify HP, add/remove tokens, terrain, log, end) |
 
-| Tool | File | Parameters | Description |
-|------|------|------------|-------------|
-| `webSearchTool` | `server/vn/tools/webSearchTool.ts` | `{ query, maxResults }` | Tavily web search for world-building |
-| `imageGenTool` | `server/vn/tools/imageGenTool.ts` | `{ assetId, prompt, type, aspectRatio }` | Generate scene/character image |
-| `musicGenTool` | `server/vn/tools/musicGenTool.ts` | `{ assetId, prompts[], durationSeconds, bpm? }` | Generate ambient music track |
+### `frameBuilderTool` — Normalization
 
-### Storyteller Agent Tools
+Accepts VNFrame in canonical form, legacy form, or either wrapped in `{ frame: ... }`. Legacy-to-canonical normalization:
+- Panel `position`/`id` inference
+- `background` string → `panel.backgroundAsset`
+- `assetKey` → `characterAsset` (filters bg keys)
+- Object effects (`{ shake: true }`) → `VNEffect[]`
+- Narration fallback injection for `requiresNarration` types via `FRAME_REGISTRY_MAP`
 
-| Tool | File | Parameters | Description |
-|------|------|------------|-------------|
-| `frameBuilderTool` | `server/vn/tools/frameBuilderTool.ts` | VNFrame (minus `_meta`) | Build and validate one VNFrame |
-| `plotStateTool` | `server/vn/tools/plotStateTool.ts` | `{ sessionId, currentSceneId }` | Read narrative state, beats, nudge |
-| `sceneCompleteTool` | `server/vn/tools/sceneCompleteTool.ts` | `{ sessionId, completedSceneId }` | Mark scene done, get next scene |
+### `initCombatTool` — Token Setup Guidelines
+
+```
+- Player token: type='player', place at left side (col 1-2), hp from playerStatsTool
+- Enemies: type='enemy', varied positions on right side
+- Objectives: type='objective', icon='⭐' or relevant emoji, at strategic locations
+- Terrain: add 3-6 cells for cover/obstacles
+```
+
+### `combatEventTool` — Event Types
+
+| Event | Fields | Effect |
+|-------|--------|--------|
+| `modify_hp` | `tokenId, delta` | Clamped to `[0, maxHp]`; auto-logs defeat |
+| `add_token` | `token` | Adds token with defaults; logs entry |
+| `remove_token` | `tokenId` | Removes token from state |
+| `add_terrain` | `col, row, terrainType` | Adds terrain cell |
+| `log_message` | `message` | Appends to combat log |
+| `end_combat` | `result, message` | Sets `isComplete=true`, records result |
 
 ---
 
-## 6. Asset System
+## 9. Asset System
 
 ### Storage
 
 - Assets are stored as files on disk: `public/generated/{packageId}/`
 - Images: `.png` files (backgrounds + characters)
 - Music: `.pcm` files (16-bit PCM audio)
-- Served by `@fastify/static` middleware
-
-### Naming Convention
-
-```
-public/generated/{packageId}/{assetId}.png   (backgrounds)
-public/generated/{packageId}/{charId}.png    (characters, transparent)
-public/generated/{packageId}/{moodId}.pcm    (music)
-```
+- Served by `@fastify/static`
 
 ### Resolution
 
@@ -217,32 +497,48 @@ public/generated/{packageId}/{moodId}.pcm    (music)
 resolveAsset(key, pack) -> URL string or '/assets/placeholder.png'
 ```
 
-Looks up `pack.assets.backgrounds[key]` first, then `pack.assets.characters[key]`. Returns placeholder for unknown/undefined keys.
+Looks up `pack.assets.backgrounds[key]` then `pack.assets.characters[key]`. Returns placeholder for unknown keys.
+
+### Map Image Generation (Tactical Combat)
+
+`initCombatTool` calls `generateSceneImage(prompt, { aspectRatio: '16:9' })` with a "top-down tactical RPG battle map, bird's eye view" prompt. The result is a base64 data URL stored in `tacticalMapData.mapImageUrl`. Falls back to empty string (dark placeholder) on error.
 
 ---
 
-## 7. Effect Types
+## 10. Effect Types
 
 | Effect | CSS Implementation | Targets |
 |--------|-------------------|---------|
 | `shake` | `translateX` oscillation keyframe | screen, left, right, center |
-| `flash` | Absolute overlay div, `opacity: 1 -> 0` | screen, left, right, center |
-| `fade-in` | Frame wrapper `opacity: 0 -> 1` transition | screen |
-| `fade-out` | Frame wrapper `opacity: 1 -> 0` transition | screen |
+| `flash` | Absolute overlay div, `opacity: 1 → 0` | screen, left, right, center |
+| `fade-in` | Frame wrapper `opacity: 0 → 1` | screen |
+| `fade-out` | Frame wrapper `opacity: 1 → 0` | screen |
 | `scan-lines` | `repeating-linear-gradient` overlay toggle | screen |
 | `vignette-pulse` | Radial gradient overlay with pulse animation | screen |
 
-All effects auto-clear after `durationMs`. Optional `intensity` (0-1) and `color` (CSS string).
+All effects auto-clear after `durationMs`. Optional `intensity` (0–1) and `color` (CSS string).
 
 ---
 
-## 8. Design Values (from `public/vn-system.html`)
+## 11. Internationalisation (i18n)
+
+**Source of truth**: `src/lib/i18n.ts`
+
+All UI strings use `t(key, locale)`. The `VNPackage.language` field drives the agent's output language — all generated dialogue, narration, choice text, item names, etc. must be in that language.
+
+Currently supported locales: `en`, `zh-CN`.
+
+UI keys include: `dm_thinking`, `round_label`, `retreat`, `map_title`, `map_title_region`, `map_title_area`, `end_turn`, and frame-specific strings.
+
+---
+
+## 12. Design Values
 
 ### Layout
 
 | Property | Value |
 |----------|-------|
-| Frame aspect ratio | 16:9 (1144 x 644px reference) |
+| Frame aspect ratio | 16:9 (1144 × 644px reference) |
 | HUD height | 48px |
 | Control bar height | 52px |
 | Font family | `'VT323', 'Courier New', monospace` |
@@ -253,14 +549,14 @@ All effects auto-clear after `durationMs`. Optional `intensity` (0-1) and `color
 |-------|------|--------|-------------------|
 | Active | `0 0 62%` | none | 1.0 |
 | Inactive | `0 0 38%` | `grayscale(1) brightness(.22)` | 0.28 |
-| Transition | `all 0.35s ease` | -- | -- |
+| Transition | `all 0.35s ease` | — | — |
 
 ### Three-Panel Layout
 
 | Panel | Width |
 |-------|-------|
 | Left | 27% |
-| Center | flex: 1 (46%) |
+| Center | flex: 1 (~46%) |
 | Right | 27% |
 
 ### Text Boxes
@@ -273,57 +569,26 @@ All effects auto-clear after `durationMs`. Optional `intensity` (0-1) and `color
 | Character name color | `rgba(255,198,70,.9)` |
 | Narrator label color | `rgba(140,210,255,.7)` |
 | Text size | 18px |
-| Text color | `rgba(255,255,255,.9)` |
-
-### Choice Buttons
-
-| Property | Value |
-|----------|-------|
-| Background | `rgba(0,0,0,.68)` |
-| Border | `1px solid rgba(255,255,255,.1)` |
-| Border radius | 4px |
-| Selected bg | `rgba(255,255,255,.1)` |
-| Selected border | `rgba(255,255,255,.28)` |
-
-### Battle Action Bar
-
-| Property | Value |
-|----------|-------|
-| Grid columns | `160px 1fr 220px` |
-| Width | 68% of frame |
-| Avatar size | 58px circle |
-| Skill grid | 2x2 (`grid-template-columns: 1fr 1fr`) |
 
 ---
 
-## 9. API Routes
+## 13. API Routes
 
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/api/vn/plan` | SSE stream for plan phase progress |
-| POST | `/api/vn/tell` | Submit player action, receive VNFrame[] |
-| GET | `/api/vn/:packageId/story-map` | Dev endpoint: ASCII story tree |
+| POST | `/api/vn/tell-chat` | Submit player action, receive `{ frames, pendingSceneComplete }` |
+| GET | `/api/vn/sessions/:sessionId` | Get current session state |
+| GET | `/api/vn/debug/trace/:sessionId` | Dev: raw agent trace |
 
-### Plan Phase SSE Events
+### Tell-Chat Request/Response
 
-```
-data: { "type": "phase", "phase": "research", "message": "..." }
-data: { "type": "progress", "message": "Generated background: harbor-night" }
-data: { "type": "phase", "phase": "assets", "message": "..." }
-data: { "type": "phase", "phase": "assembly", "message": "..." }
-data: { "type": "complete", "packageId": "...", "package": { ... } }
-data: { "type": "error", "message": "..." }
-```
-
-### Tell Phase Request/Response
-
-**Request** (POST `/api/vn/tell`):
+**Request** (POST `/api/vn/tell-chat`):
 ```json
 {
   "sessionId": "string",
   "packageId": "string",
-  "playerAction": "string",
-  "choiceId": "string (optional)"
+  "playerAction": "string"
 }
 ```
 
@@ -331,110 +596,120 @@ data: { "type": "error", "message": "..." }
 ```json
 {
   "frames": [ VNFrame, ... ],
-  "newBeatIndex": 3,
-  "sceneComplete": false,
-  "nextSceneId": null
+  "pendingSceneComplete": "nextSceneId | null | undefined"
 }
 ```
 
----
-
-## 10. Test Coverage Map
-
-### Passing Tests (schema validation)
-
-| File | Section | Tests |
-|------|---------|-------|
-| `tests/vnFrame.spec.ts` | 7.1 VNFrame Contract | 11 tests |
-| `tests/vnPackage.spec.ts` | 7.2 VNPackage Schema | 7 tests |
-| `tests/resolveAsset.spec.ts` | 7.3 Asset Resolution | 6 tests |
-
-### Test Stubs (it.todo)
-
-| File | Section | Stubs |
-|------|---------|-------|
-| `tests/FrameEffects.spec.tsx` | 7.4 Effect System | 7 stubs |
-| `tests/frames/FullScreenFrame.spec.tsx` | 7.5 Full Screen | 4 stubs |
-| `tests/frames/DialogueFrame.spec.tsx` | 7.5 Dialogue | 6 stubs |
-| `tests/frames/ThreePanelFrame.spec.tsx` | 7.5 Three Panel | 3 stubs |
-| `tests/frames/ChoiceFrame.spec.tsx` | 7.5 Choice | 5 stubs |
-| `tests/frames/BattleFrame.spec.tsx` | 7.5 Battle | 6 stubs |
-| `tests/VNRenderer.spec.tsx` | 7.6 VNRenderer | 10 stubs |
-| `tests/plotState.spec.ts` | 7.7 Plot State | 7 stubs |
-| `tests/agents/planningAgent.spec.ts` | 7.8 Planning Agent | 5 stubs |
-| `tests/agents/storytellerAgent.spec.ts` | 7.8 Storyteller Agent | 6 stubs |
-| `tests/designParity.spec.ts` | 7.9 Design Parity | 12 stubs |
-
-**Total: 24 passing tests, 71 todo stubs**
+Special `playerAction` prefixes:
+- `[combat-result] victory|defeat|escape {...}` — result from client-side combat
+- `[combat-freetext][state:{...}] <text>` — player free text during combat; triggers `combatEventTool`
 
 ---
 
-## File Structure
+## 14. Test Coverage
+
+### Test Summary
+
+| Suite | File | Count |
+|-------|------|-------|
+| VNFrame schema | `tests/vnFrame.spec.ts` | 11 |
+| VNPackage schema | `tests/vnPackage.spec.ts` | 7 |
+| Asset resolution | `tests/resolveAsset.spec.ts` | 6 |
+| Frame effects | `tests/FrameEffects.spec.tsx` | 7 |
+| FullScreenFrame | `tests/frames/FullScreenFrame.spec.tsx` | 4 |
+| DialogueFrame | `tests/frames/DialogueFrame.spec.tsx` | 6 |
+| ThreePanelFrame | `tests/frames/ThreePanelFrame.spec.tsx` | 3 |
+| ChoiceFrame | `tests/frames/ChoiceFrame.spec.tsx` | 5 |
+| BattleFrame | `tests/frames/BattleFrame.spec.tsx` | 6 |
+| frameBuilderTool | `tests/frameBuilderTool.spec.ts` | 10 |
+| VNFrame payload | `tests/frames/` | varies |
+| Plot state | `tests/plotState.spec.ts` | 7 |
+| Combat engine | `tests/combatEngine.spec.ts` | 43 |
+| TacticalMapFrame | `tests/tacticalMapFrame.spec.tsx` | 6 |
+| Design parity | `tests/designParity.spec.ts` | 12 |
+
+**Total: 87+ passing tests**
+
+### TypeScript Enforcement
+
+Adding a new `FrameType` to `FrameTypeSchema` but not to `CLIENT_FRAME_REGISTRY` causes a TypeScript error at the `Record<FrameType, ClientFrameEntry>` definition, preventing missing-case regressions.
+
+---
+
+## 15. File Structure
 
 ```
 server/
   vn/
     types/
-      vnFrame.ts          # VNFrame Zod schema + types (source of truth)
-      vnTypes.ts          # VNPackage, Character, AssetPack, PlotState
+      vnFrame.ts              # VNFrame Zod schema + FrameTypeSchema (source of truth)
+      vnTypes.ts              # VNPackage, Character, AssetPack, PlotState, PlayerStats
+    frameRegistry.ts          # Server-side frame registry (agent docs, requiresNarration, dataField)
     tools/
-      webSearchTool.ts    # Tavily search
-      imageGenTool.ts     # Wraps imageAgent.ts
-      musicGenTool.ts     # Wraps musicAgent.ts
-      frameBuilderTool.ts # Build + validate one VNFrame
-      plotStateTool.ts    # Read beat state, return nudge
-      sceneCompleteTool.ts# Mark scene done, get next
+      frameBuilderTool.ts     # Build + validate one VNFrame; normalizes legacy format
+      plotStateTool.ts        # Read beat state, return nudge
+      sceneCompleteTool.ts    # Mark scene done, get next
+      yieldToPlayerTool.ts    # End agent loop, signal client
+      playerStatsTool.ts      # Read/update player stats + inventory
+      initCombatTool.ts       # Init tactical combat: image gen + token setup + DB write
+      combatEventTool.ts      # Inject events into active combat
     agents/
-      planningAgent.ts    # 3-phase: research -> assets -> structure
-      storytellerAgent.ts # Per-turn: tool loop -> frames
-    workflows/
-      planPhase.ts        # SSE streaming orchestration
-      tellPhase.ts        # Storyteller orchestration
+      storytellerChatAgent.ts # ToolLoopAgent: per-turn frame generation
+      planningChatAgent.ts    # Multi-phase: research -> assets -> structure
     routes/
-      planRoute.ts        # GET /api/vn/plan (SSE)
-      tellRoute.ts        # POST /api/vn/tell
-    state/
-      vnPackageStore.ts   # In-memory Map<packageId, VNPackage>
-      plotStateStore.ts   # In-memory Map<sessionId, PlotState>
-    utils/
-      storyVisualizer.ts  # ASCII tree + progress graph
+      vnChatRoute.ts          # POST /api/vn/tell-chat
+      vnPlanRoute.ts          # GET /api/vn/plan (SSE)
   db/
-    schema.ts             # Drizzle SQLite schema
-    index.ts              # Drizzle instance
+    schema.ts                 # Drizzle SQLite schema (plot_states, player_stats, combat_states, ...)
+    index.ts                  # Drizzle instance + inline migrations
   agents/
-    imageAgent.ts         # Image generation (kept)
-    musicAgent.ts         # Music generation (kept)
-  index.ts                # Fastify server entry
+    imageAgent.ts             # Gemini image generation
+    musicAgent.ts             # Music generation
 
 src/
   lib/
-    resolveAsset.ts       # Asset key -> file URL resolution
+    resolveAsset.ts           # Asset key -> file URL resolution
+    i18n.ts                   # Locale strings (en, zh-CN)
+    frameRegistry.tsx         # Client-side registry: Record<FrameType, ClientFrameEntry>
+    combat/
+      types.ts                # CombatToken, TacticalMapData, CombatAction types
+      combatEngine.ts         # gridDistance, resolveAttack, computeEnemyAction, checkCombatEnd
+      combatReducer.ts        # useReducer: MOVE, ATTACK, END_TURN, ENEMY_TURN, APPLY_EXTERNAL
   components/vn/
-    FrameEffects.tsx       # CSS effect overlay
+    FrameEffects.tsx          # CSS effect overlay
+    VNRenderer.tsx            # Frame queue + input handler; uses resolveFrameEntry()
     frames/
       FullScreenFrame.tsx
       DialogueFrame.tsx
       ThreePanelFrame.tsx
       ChoiceFrame.tsx
       BattleFrame.tsx
-    VNRenderer.tsx         # Frame queue + input handler
-  context/
-    VNContext.tsx           # VNPackage + session state
+      SkillCheckFrame.tsx
+      InventoryFrame.tsx
+      MapFrame.tsx            # Location map with pan, layered level support
+      TacticalMapFrame.tsx    # SVG grid, token interaction, enemy AI, combat log
   pages/
-    VNPlanPage.tsx          # Genre/setting form + SSE progress
-    VNEnginePage.tsx        # Full-screen renderer
+    VNPlanPage.tsx            # Genre/setting form + SSE progress
+    VNEnginePage.tsx          # Full-screen VN renderer session
+    VNFramePreviewPage.tsx    # Dev: frame design system browser
+    VNProjectsPage.tsx        # Package library
 
 docs/
-  vn-engine-spec.md        # This file
+  vn-engine-spec.md           # This file
+  automatic-testing.md        # Test flow guide
+  ai-tracing.md               # Agent tracing / debug
 
 tests/
   vnFrame.spec.ts
   vnPackage.spec.ts
   resolveAsset.spec.ts
+  frameBuilderTool.spec.ts
+  plotState.spec.ts
+  combatEngine.spec.ts
+  tacticalMapFrame.spec.tsx
+  designParity.spec.ts
   FrameEffects.spec.tsx
   VNRenderer.spec.tsx
-  plotState.spec.ts
-  designParity.spec.ts
   frames/
     FullScreenFrame.spec.tsx
     DialogueFrame.spec.tsx

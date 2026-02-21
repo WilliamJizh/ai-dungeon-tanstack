@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import type { VNFrame } from '../../../../server/vn/types/vnFrame';
 import type { VNPackage } from '../../../../server/vn/types/vnTypes';
 import { resolveAsset } from '../../../lib/resolveAsset';
+import { FONT_MAIN } from '../../../lib/fonts';
+import { t } from '../../../lib/i18n';
+import { useLocale } from '../../../context/LocaleContext';
 
 interface ChoiceFrameProps {
   frame: VNFrame;
@@ -24,6 +27,7 @@ interface ChoiceFrameProps {
  * - Keyboard: up/down arrows navigate, Enter selects
  */
 export function ChoiceFrame({ frame, pack, onAdvance, onChoiceSelect, onFreeTextSubmit, isMuted, onToggleMute }: ChoiceFrameProps) {
+  const { locale } = useLocale();
   const choices = frame.choices ?? [];
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [freeText, setFreeText] = useState('');
@@ -70,7 +74,7 @@ export function ChoiceFrame({ frame, pack, onAdvance, onChoiceSelect, onFreeText
         width: '100%',
         height: '100%',
         background: '#000',
-        fontFamily: "VT323, 'Courier New', monospace",
+        fontFamily: FONT_MAIN,
         overflow: 'hidden',
       }}
     >
@@ -88,10 +92,10 @@ export function ChoiceFrame({ frame, pack, onAdvance, onChoiceSelect, onFreeText
           {frame.hud.showNav && (
             <div style={{ display: 'flex', gap: 20 }}>
               {['[ESC]', 'SAVE', 'LOAD', 'LOG', 'AUTO'].map(l => (
-                <button key={l} onClick={() => {}} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, letterSpacing: '.1em', color: 'rgba(255,255,255,.16)', fontFamily: "VT323,'Courier New',monospace", padding: 0 }}>{l}</button>
+                <button key={l} onClick={() => {}} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, letterSpacing: '.1em', color: 'rgba(255,255,255,.16)', fontFamily: FONT_MAIN, padding: 0 }}>{l}</button>
               ))}
-              <button onClick={() => onToggleMute?.()} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, letterSpacing: '.1em', color: 'rgba(255,255,255,.45)', fontFamily: "VT323,'Courier New',monospace", padding: 0 }}>
-                {isMuted ? '[MUTED]' : '[SND]'}
+              <button onClick={() => onToggleMute?.()} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, letterSpacing: '.1em', color: 'rgba(255,255,255,.45)', fontFamily: FONT_MAIN, padding: 0 }}>
+                {isMuted ? t('muted', locale) : t('sound', locale)}
               </button>
             </div>
           )}
@@ -186,7 +190,7 @@ export function ChoiceFrame({ frame, pack, onAdvance, onChoiceSelect, onFreeText
                     fontSize: 16,
                     letterSpacing: '.08em',
                     color: isSelected ? '#fff' : 'rgba(255,255,255,.8)',
-                    fontFamily: "VT323, 'Courier New', monospace",
+                    fontFamily: FONT_MAIN,
                     textAlign: 'left',
                     cursor: 'pointer',
                     width: '100%',
@@ -217,7 +221,7 @@ export function ChoiceFrame({ frame, pack, onAdvance, onChoiceSelect, onFreeText
             <input
               ref={inputRef}
               type="text"
-              placeholder="WRITE YOUR ACTION..."
+              placeholder={t('free_text_placeholder', locale)}
               value={freeText}
               onChange={e => setFreeText(e.target.value)}
               style={{
@@ -229,7 +233,7 @@ export function ChoiceFrame({ frame, pack, onAdvance, onChoiceSelect, onFreeText
                 padding: '0 14px',
                 fontSize: 15,
                 letterSpacing: '.1em',
-                fontFamily: "VT323, 'Courier New', monospace",
+                fontFamily: FONT_MAIN,
               }}
             />
             <button
@@ -244,7 +248,7 @@ export function ChoiceFrame({ frame, pack, onAdvance, onChoiceSelect, onFreeText
                 color: 'rgba(255,255,255,.45)',
                 fontSize: 16,
                 cursor: 'pointer',
-                fontFamily: "VT323, 'Courier New', monospace",
+                fontFamily: FONT_MAIN,
               }}
             >
               {'\u25B6'}
@@ -261,11 +265,11 @@ export function ChoiceFrame({ frame, pack, onAdvance, onChoiceSelect, onFreeText
               fontSize: 13,
               letterSpacing: '.12em',
               color: 'rgba(255,255,255,.28)',
-              fontFamily: "VT323, 'Courier New', monospace",
+              fontFamily: FONT_MAIN,
               cursor: 'pointer',
             }}
           >
-            [SPACE] &nbsp;NEXT
+            {t('next_hint', locale)}
           </button>
         )}
       </div>

@@ -74,3 +74,7 @@ sqlite.exec(`
 
 // Add player_stats_json column if it doesn't exist (migration)
 try { sqlite.exec(`ALTER TABLE plot_states ADD COLUMN player_stats_json TEXT NOT NULL DEFAULT '{}'`); } catch (_) {}
+
+// Add tags/source columns to ai_traces if they don't exist (migration)
+try { sqlite.exec(`ALTER TABLE ai_traces ADD COLUMN tags TEXT`); } catch (_) {}
+try { sqlite.exec(`ALTER TABLE ai_traces ADD COLUMN source TEXT`); } catch (_) {}

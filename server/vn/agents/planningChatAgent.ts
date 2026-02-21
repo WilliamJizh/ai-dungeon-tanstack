@@ -1,18 +1,15 @@
 import { ToolLoopAgent, InferAgentUIMessage, hasToolCall, tool } from 'ai';
-import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { z } from 'zod';
 import { createPlanningTools, planningToolSchemas } from '../tools/planningTools.js';
 import type { PlanSession } from '../state/planSessionStore.js';
+import { getGoogleModel } from '../../lib/modelFactory.js';
 
-const MODEL_ID = process.env.GEMINI_CHAT_MODEL ?? 'gemini-3-flash-preview';
+function buildPlanningSystemPrompt(language: string): string {
+  return `You are a collaborative visual novel co-author. Your job is to work with the user through natural conversation to design and build an interactive visual novel story together.
 
-const PLANNING_CHAT_SYSTEM_PROMPT = `You are a collaborative visual novel co-author. Your job is to work with the user through natural conversation to design and build an interactive visual novel story together.
-
-LANGUAGE SETUP:
-- In your first or second message, ask the user which language they want for their story. Options: English (en) or 中文/Chinese (zh-CN).
-- Once established, ALL generated content — character names, descriptions, story beats, dialogue examples, scene titles, location names — MUST be in that language.
-- Always include the chosen language value when calling proposeStoryPremise (language field).
-- If the user writes in Chinese, default to zh-CN. If in English, default to en.
+LANGUAGE: The story language is "${language}" (BCP-47). Do NOT ask the user about language — it is pre-selected.
+ALL generated content — character names, descriptions, story beats, dialogue examples, scene titles, location names — MUST be written in this language only. No mixing.
+Always pass language: "${language}" when calling proposeStoryPremise.
 
 PERSONALITY: Creative, enthusiastic, inquisitive. Ask one focused question at a time. Build on the user's ideas rather than replacing them.
 
@@ -31,17 +28,23 @@ TOOL USAGE RULES:
 - Don't batch ALL scenes into one turn — propose act by act, checking in with the user.
 - Character IDs MUST be lowercase slugs (e.g., "kira_voss"). The scene location field MUST equal the scene ID.
 
+REFERENCE IMAGES:
+- The user can upload images at any point in the conversation.
+- Uploaded images are automatically stored and used as visual reference when generating the next character portrait or scene background.
+- When a user attaches an image, acknowledge it warmly and ask how they'd like to use it — e.g. as inspiration for a character's look or a scene's atmosphere.
+- You do not need to do anything special in your tool calls; the reference is applied automatically.
+
 TONE: Be conversational. Avoid walls of text. After proposing something, follow up with a short question like "Does this feel right?" or "Want me to adjust anything?".`;
+}
 
 // ─── Agent factory (per-request, with session in tool closures) ──────────────
 
 export function createPlanningAgent(session: PlanSession) {
-  const google = createGoogleGenerativeAI({ apiKey: process.env.GEMINI_API_KEY! });
   const tools = createPlanningTools(session);
 
   return new ToolLoopAgent({
-    model: google(MODEL_ID),
-    instructions: PLANNING_CHAT_SYSTEM_PROMPT,
+    model: getGoogleModel('chat'),
+    instructions: buildPlanningSystemPrompt(session.language),
     tools,
     stopWhen: hasToolCall('finalizePackage'),
   });

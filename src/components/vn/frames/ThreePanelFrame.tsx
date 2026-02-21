@@ -3,6 +3,9 @@ import type { VNFrame, VNPanel } from '../../../../server/vn/types/vnFrame';
 import type { VNPackage } from '../../../../server/vn/types/vnTypes';
 import { resolveAsset } from '../../../lib/resolveAsset';
 import { useTypewriter } from '../hooks/useTypewriter';
+import { FONT_MAIN } from '../../../lib/fonts';
+import { t } from '../../../lib/i18n';
+import { useLocale } from '../../../context/LocaleContext';
 
 interface ThreePanelFrameProps {
   frame: VNFrame;
@@ -24,6 +27,7 @@ interface ThreePanelFrameProps {
  * - Narration in center: bottom 14px
  */
 export function ThreePanelFrame({ frame, pack, onAdvance, isMuted, onToggleMute }: ThreePanelFrameProps) {
+  const { locale } = useLocale();
   const leftPanel = frame.panels.find(p => p.id === 'left');
   const centerPanel = frame.panels.find(p => p.id === 'center');
   const rightPanel = frame.panels.find(p => p.id === 'right');
@@ -196,7 +200,7 @@ export function ThreePanelFrame({ frame, pack, onAdvance, isMuted, onToggleMute 
                   marginBottom: 6,
                 }}
               >
-                NARRATOR
+                {t('narrator', locale)}
               </div>
               <p style={{ fontSize: 17, lineHeight: 1.5, color: 'rgba(255,255,255,.72)', letterSpacing: '.04em', textAlign: 'left' }}>
                 {narrationTypewriter.displayedText}
@@ -217,7 +221,7 @@ export function ThreePanelFrame({ frame, pack, onAdvance, isMuted, onToggleMute 
         width: '100%',
         height: '100%',
         background: '#000',
-        fontFamily: "VT323, 'Courier New', monospace",
+        fontFamily: FONT_MAIN,
         overflow: 'hidden',
         cursor: 'default',
       }}
@@ -236,10 +240,10 @@ export function ThreePanelFrame({ frame, pack, onAdvance, isMuted, onToggleMute 
           {frame.hud.showNav && (
             <div style={{ display: 'flex', gap: 20 }}>
               {['[ESC]', 'SAVE', 'LOAD', 'LOG', 'AUTO'].map(l => (
-                <button key={l} onClick={() => {}} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, letterSpacing: '.1em', color: 'rgba(255,255,255,.16)', fontFamily: "VT323,'Courier New',monospace", padding: 0 }}>{l}</button>
+                <button key={l} onClick={() => {}} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, letterSpacing: '.1em', color: 'rgba(255,255,255,.16)', fontFamily: FONT_MAIN, padding: 0 }}>{l}</button>
               ))}
-              <button onClick={(e) => { e.stopPropagation(); onToggleMute?.(); }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, letterSpacing: '.1em', color: 'rgba(255,255,255,.45)', fontFamily: "VT323,'Courier New',monospace", padding: 0 }}>
-                {isMuted ? '[MUTED]' : '[SND]'}
+              <button onClick={(e) => { e.stopPropagation(); onToggleMute?.(); }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, letterSpacing: '.1em', color: 'rgba(255,255,255,.45)', fontFamily: FONT_MAIN, padding: 0 }}>
+                {isMuted ? t('muted', locale) : t('sound', locale)}
               </button>
             </div>
           )}
@@ -265,11 +269,11 @@ export function ThreePanelFrame({ frame, pack, onAdvance, isMuted, onToggleMute 
             fontSize: 13,
             letterSpacing: '.12em',
             color: 'rgba(255,255,255,.28)',
-            fontFamily: "VT323, 'Courier New', monospace",
+            fontFamily: FONT_MAIN,
             cursor: 'pointer',
           }}
         >
-          [SPACE] &nbsp;NEXT
+          {t('next_hint', locale)}
         </button>
       </div>
     </div>

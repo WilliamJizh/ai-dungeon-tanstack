@@ -4,6 +4,7 @@ import type { VNPackage } from '../../../../server/vn/types/vnTypes';
 import { resolveAsset } from '../../../lib/resolveAsset';
 import { t } from '../../../lib/i18n';
 import { useLocale } from '../../../context/LocaleContext';
+import { FONT_MAIN } from '../../../lib/fonts';
 
 interface MapFrameProps {
   frame: VNFrame;
@@ -99,7 +100,7 @@ export function MapFrame({ frame, pack, onAdvance, onChoiceSelect }: MapFramePro
         width: '100%',
         height: '100%',
         background: '#000',
-        fontFamily: "VT323, 'Courier New', monospace",
+        fontFamily: FONT_MAIN,
         overflow: 'hidden',
         cursor: dragging.current ? 'grabbing' : 'grab',
         touchAction: 'none',

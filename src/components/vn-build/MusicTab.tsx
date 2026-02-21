@@ -1,7 +1,6 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import type { PlanDraftState } from '../../hooks/usePlanDraft';
-
-const font = "VT323,'Courier New',monospace";
+import { FONT_MAIN as font } from '../../lib/fonts';
 const subtle = 'rgba(255,255,255,.18)';
 const gold = 'rgba(255,198,70,.85)';
 const faint = 'rgba(255,255,255,.06)';
@@ -17,21 +16,35 @@ interface MusicTrack {
 
 function TrackRow({ track }: { track: MusicTrack }) {
   const [playing, setPlaying] = useState(false);
-  const audioRef = useState<HTMLAudioElement | null>(null);
+  const ctxRef = useRef<AudioContext | null>(null);
+  const sourceRef = useRef<AudioBufferSourceNode | null>(null);
 
-  const togglePlay = () => {
-    if (!audioRef[0]) {
-      const audio = new Audio(track.musicUrl);
-      audioRef[0] = audio;
-      audio.loop = true;
-      audio.onended = () => setPlaying(false);
-    }
+  const togglePlay = async () => {
     if (playing) {
-      audioRef[0].pause();
+      sourceRef.current?.stop();
+      sourceRef.current = null;
       setPlaying(false);
-    } else {
-      audioRef[0].play().then(() => setPlaying(true)).catch(() => {});
+      return;
     }
+
+    if (!ctxRef.current) {
+      ctxRef.current = new AudioContext();
+    }
+    const ctx = ctxRef.current;
+    if (ctx.state === 'suspended') await ctx.resume();
+
+    const response = await fetch(track.musicUrl);
+    const arrayBuffer = await response.arrayBuffer();
+    const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+
+    const source = ctx.createBufferSource();
+    source.buffer = audioBuffer;
+    source.loop = true;
+    source.connect(ctx.destination);
+    source.onended = () => setPlaying(false);
+    source.start();
+    sourceRef.current = source;
+    setPlaying(true);
   };
 
   return (

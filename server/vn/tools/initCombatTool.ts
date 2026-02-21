@@ -2,7 +2,7 @@ import { tool } from 'ai';
 import { z } from 'zod';
 import { db } from '../../db/index.js';
 import { combatStates } from '../../db/schema.js';
-import { generateSceneImage } from '../../agents/imageAgent.js';
+import { generateSceneImage } from '../../lib/imageGen.js';
 
 const initCombatParams = z.object({
   sessionId: z.string(),

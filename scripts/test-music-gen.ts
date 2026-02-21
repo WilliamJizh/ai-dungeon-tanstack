@@ -1,6 +1,6 @@
 import 'dotenv/config'
 import { writeFileSync } from 'fs'
-import { generateAmbientMusic } from '../server/agents/musicAgent.js'
+import { generateAmbientMusic } from '../server/lib/musicGen.js'
 
 console.log('Testing music generation (5s)...')
 const result = await generateAmbientMusic(

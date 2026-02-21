@@ -4,6 +4,7 @@ import type { VNPackage } from '../../../../server/vn/types/vnTypes';
 import { resolveAsset } from '../../../lib/resolveAsset';
 import { t } from '../../../lib/i18n';
 import { useLocale } from '../../../context/LocaleContext';
+import { FONT_MAIN } from '../../../lib/fonts';
 
 interface InventoryFrameProps {
   frame: VNFrame;
@@ -85,7 +86,7 @@ export function InventoryFrame({ frame, pack, onAdvance, onChoiceSelect }: Inven
         width: '100%',
         height: '100%',
         background: '#0c0c0c',
-        fontFamily: "VT323, 'Courier New', monospace",
+        fontFamily: FONT_MAIN,
         overflow: 'hidden',
       }}
     >

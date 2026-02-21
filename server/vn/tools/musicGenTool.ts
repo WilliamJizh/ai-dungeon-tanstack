@@ -1,6 +1,6 @@
 import { tool } from 'ai';
 import { z } from 'zod';
-import { generateAmbientMusic } from '../../agents/musicAgent.js';
+import { generateAmbientMusic } from '../../lib/musicGen.js';
 
 /**
  * Generates an ambient music track using Lyria realtime.

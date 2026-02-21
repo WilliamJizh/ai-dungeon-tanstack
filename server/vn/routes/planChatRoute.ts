@@ -4,14 +4,31 @@ import { createPlanningAgent } from '../agents/planningChatAgent.js';
 import { getOrCreatePlanSession } from '../state/planSessionStore.js';
 import { createPlanChatTrace } from '../../debug/tracePlanChat.js';
 
+function extractFileParts(messages: unknown[]): Array<{ url: string; mediaType: string }> {
+  const result: Array<{ url: string; mediaType: string }> = [];
+  // Find the last user message and collect its file parts
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i] as { role?: string; parts?: Array<{ type?: string; url?: string; mediaType?: string }> };
+    if (msg?.role !== 'user') continue;
+    for (const part of msg.parts ?? []) {
+      if (part.type === 'file' && part.url && part.mediaType) {
+        result.push({ url: part.url, mediaType: part.mediaType });
+      }
+    }
+    break; // only the latest user message
+  }
+  return result;
+}
+
 export async function planChatRoute(app: FastifyInstance) {
   app.post<{
     Body: {
       messages: unknown[];
       sessionId: string;
+      locale?: string;
     };
   }>('/chat', async (req, reply) => {
-    const { messages: uiMessages, sessionId } = req.body;
+    const { messages: uiMessages, sessionId, locale } = req.body;
 
     if (!sessionId) {
       return reply.status(400).send({ error: 'sessionId is required' });
@@ -23,7 +40,16 @@ export async function planChatRoute(app: FastifyInstance) {
 
     req.log.info({ reqId: req.id, sessionId, messageCount: uiMessages.length }, '[VN plan/chat] request');
 
-    const session = getOrCreatePlanSession(sessionId);
+    const session = getOrCreatePlanSession(sessionId, locale);
+
+    // Extract any file attachments from the latest user message and store in session
+    const newFiles = extractFileParts(uiMessages);
+    for (const f of newFiles) {
+      if (!session.draft.referenceImages.some(r => r.url === f.url)) {
+        session.draft.referenceImages.push(f);
+      }
+    }
+
     const agent = createPlanningAgent(session);
     const { traceId, onStepFinish, finishTrace } = createPlanChatTrace({
       sessionId,

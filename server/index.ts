@@ -4,7 +4,6 @@ import staticFiles from '@fastify/static';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { config } from 'dotenv';
-import { planRoute } from './vn/routes/planRoute.js';
 import { planChatRoute } from './vn/routes/planChatRoute.js';
 import { tellChatRoute } from './vn/routes/tellChatRoute.js';
 import { storyMapRoute } from './vn/routes/storyMapRoute.js';
@@ -32,7 +31,6 @@ app.get('/health', async () => ({ status: 'ok' }));
 
 // VN routes under /api/vn prefix
 await app.register(async (vnApp) => {
-  await planRoute(vnApp);
   await planChatRoute(vnApp);
   await tellChatRoute(vnApp);
   await storyMapRoute(vnApp);

@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
-
-const FONT = "'VT323', 'Courier New', monospace"
+import { FONT_MAIN as FONT } from '../lib/fonts'
 
 const ACTIONS = [
   { id: 'STRIKE',     icon: '⚔',  label: 'STRIKE'     },

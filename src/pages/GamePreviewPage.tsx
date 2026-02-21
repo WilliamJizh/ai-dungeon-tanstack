@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { SendHorizontal } from 'lucide-react';
+import { FONT_MAIN as FONT } from '../lib/fonts';
 
 const CHOICE_OPTIONS = [
   'Ask about the murder',
@@ -12,7 +13,6 @@ const CHOICE_OPTIONS = [
 type Mode = 'dialogue' | 'choices';
 type ActivePanel = 'left' | 'right';
 
-const FONT = "'VT323', 'Courier New', monospace";
 const PANEL_ACTIVE   = '0 0 62%';
 const PANEL_INACTIVE = '0 0 38%';
 

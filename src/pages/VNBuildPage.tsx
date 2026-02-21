@@ -2,9 +2,11 @@ import { useState, useCallback, useRef } from 'react';
 import { ChatPanel } from '../components/vn-build/ChatPanel';
 import { StoryPanel } from '../components/vn-build/StoryPanel';
 import { usePlanDraft } from '../hooks/usePlanDraft';
+import { useLocale } from '../context/LocaleContext';
+import { LanguageToggle } from '../components/shared/LanguageToggle';
 import type { PlanningUIMessage } from '../../server/vn/agents/planningChatAgent';
-
-const font = "VT323,'Courier New',monospace";
+import { FONT_MAIN as font } from '../lib/fonts';
+import { t } from '../lib/i18n';
 const subtle = 'rgba(255,255,255,.18)';
 const gold = 'rgba(255,198,70,.85)';
 const green = 'rgba(80,220,120,.9)';
@@ -18,6 +20,7 @@ export function VNBuildPage() {
   const sessionIdRef = useRef(newSessionId());
   const sessionId = sessionIdRef.current;
 
+  const { locale, setLocale } = useLocale();
   const [messages, setMessages] = useState<PlanningUIMessage[]>([]);
   const draft = usePlanDraft(messages);
 
@@ -52,11 +55,16 @@ export function VNBuildPage() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <span style={{ fontSize: 18, color: gold, letterSpacing: '.2em' }}>◆</span>
           <span style={{ fontSize: 13, letterSpacing: '.28em', textTransform: 'uppercase', color: 'rgba(255,255,255,.7)' }}>
-            STORY BUILDER
+            {t('story_builder', locale)}
           </span>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <LanguageToggle
+            locale={locale}
+            onToggle={() => setLocale(locale === 'en' ? 'zh-CN' : 'en')}
+            style={{ fontSize: 11, letterSpacing: '.18em', padding: '4px 10px' }}
+          />
           <a
             href={`/debug/traces?pipeline=vn-plan-chat&sessionId=${sessionId}`}
             style={{
@@ -69,7 +77,7 @@ export function VNBuildPage() {
               borderRadius: 2,
             }}
           >
-            TRACES
+            {t('nav_traces', locale)}
           </a>
           <a
             href="/vn/projects"
@@ -83,7 +91,7 @@ export function VNBuildPage() {
               borderRadius: 2,
             }}
           >
-            PROJECTS
+            {t('nav_projects', locale)}
           </a>
 
           {draft.packageId && (
@@ -99,7 +107,7 @@ export function VNBuildPage() {
                 borderRadius: 2,
               }}
             >
-              PLAY ▶
+              {t('nav_play', locale)}
             </a>
           )}
         </div>
@@ -119,6 +127,7 @@ export function VNBuildPage() {
         >
           <ChatPanel
             sessionId={sessionId}
+            locale={locale}
             onMessagesChange={handleMessagesChange}
           />
         </div>

@@ -1,5 +1,5 @@
 import { ToolLoopAgent, InferAgentUIMessage, hasToolCall, tool } from 'ai';
-import { createGoogleGenerativeAI } from '@ai-sdk/google';
+import { FRAME_REGISTRY } from '../frameRegistry.js';
 import { z } from 'zod';
 import { frameBuilderTool } from '../tools/frameBuilderTool.js';
 import { plotStateTool } from '../tools/plotStateTool.js';
@@ -11,9 +11,7 @@ import { combatEventTool } from '../tools/combatEventTool.js';
 import type { VNPackage } from '../types/vnTypes.js';
 import type { VNFrame } from '../types/vnFrame.js';
 
-const MODEL_ID = process.env.GEMINI_STORY_MODEL
-  ?? process.env.GEMINI_TEXT_MODEL
-  ?? 'gemini-3-flash-preview';
+import { getGoogleModel } from '../../lib/modelFactory.js';
 
 function buildCharacterAssetMap(vnPackage: VNPackage): Map<string, string> {
   const charAssetKeys = Object.keys(vnPackage.assets.characters);
@@ -27,6 +25,15 @@ function buildCharacterAssetMap(vnPackage: VNPackage): Map<string, string> {
 }
 
 function buildDMSystemPrompt(vnPackage: VNPackage, sessionId: string): string {
+  const frameTypeLines = FRAME_REGISTRY
+    .map(e => `- '${e.type}': ${e.agentSummary}`)
+    .join('\n');
+
+  const workflowEntries = FRAME_REGISTRY
+    .filter(e => e.agentWorkflow != null)
+    .map(e => e.agentWorkflow!.replace(/SESSION_ID/g, sessionId))
+    .join('\n\n');
+
   const charAssetMap = buildCharacterAssetMap(vnPackage);
 
   const charList = vnPackage.characters
@@ -84,12 +91,7 @@ DM WORKFLOW (follow exactly every turn):
 5. Otherwise, after all frames are built, call yieldToPlayer({ waitingFor: 'choice' | 'free-text' | 'continue' })
 
 FRAME TYPES — use ALL of these:
-- 'full-screen': Atmosphere, dramatic reveals, location shots. 1 panel (id: "center"), backgroundAsset set, add narration.text.
-- 'dialogue': Character speaks. 2 panels: speaker (weight=62, dimmed=false) + listener (weight=38, dimmed=true). BOTH panels need backgroundAsset. Set dialogue.speaker, dialogue.text, dialogue.targetPanel.
-- 'three-panel': 3+ characters on screen. 3 panels: "left", "center", "right". Each needs backgroundAsset.
-- 'choice': Decision point. 1–2 panels. Include choices[] with 2–4 options (id + text). Set showFreeTextInput: true if player can also type freely.
-- 'battle': Combat. Include battle.player, battle.enemies[], battle.combatLog[], battle.skills[], battle.round.
-- 'transition': Scene/time change. panels: [] (empty). Set transition.type and transition.durationMs.
+${frameTypeLines}
 
 STRICT ASSET RULES:
 - Every frame needs a UNIQUE id (descriptive slug: "harbor-arrival-1", "sato-confronts-2").
@@ -102,57 +104,16 @@ STRICT ASSET RULES:
 
 INTERACTIVE GAMEPLAY FRAMES (use these to create engaging moments beyond dialogue):
 
-skill-check — Use when the player attempts something risky or uncertain:
-  1. Call playerStatsTool({ action: "read", sessionId: "${sessionId}" }) to get their current stats
-  2. Pick the relevant attribute (strength/dexterity/intelligence/luck/charisma)
-  3. Compute: modifier = Math.floor((attributeValue - 10) / 2), roll = random 1-20, total = roll + modifier
-  4. Set difficulty (DC): easy=8, moderate=12, hard=16, very hard=20
-  5. Build a skill-check frame: type="skill-check", skillCheck: { stat, statValue, difficulty, roll, modifier, total, succeeded: total>=difficulty, description }
-  6. Follow with narrative frames reacting to the outcome (success/failure each lead different directions)
-  7. If HP changes (combat, hazard), call playerStatsTool({ action: "update", sessionId: "${sessionId}", updates: { hp: newHp } })
+${workflowEntries}
 
-inventory — Use when player finds an item, opens their pack, or needs to choose an item:
-  - To give an item: call playerStatsTool({ action: "addItem", sessionId: "${sessionId}", item: { id, name, description, icon, quantity:1 } })
-  - To show inventory: build frame type="inventory" with inventoryData from playerStatsTool read result
-  - mode="view" to display, mode="select" when player must choose an item to use
-
-map — Use when the player needs to navigate between locations or the scene calls for travel:
-  - Build frame type="map" with mapData: { backgroundAsset, currentLocationId, locations[] }
-  - Populate locations from the package scenes (each scene is a potential location)
-  - accessible: true for scenes the player can reach now, false for locked/future scenes
-  - visited: true for completedScenes from plotStateTool
-
-GENERAL RULE: Alternate between narrative dialogue frames AND gameplay frames. Do not have more than 3 consecutive pure-narrative frames without adding a skill-check, choice, or interactive moment.
-
-TACTICAL COMBAT WORKFLOW:
-When the story calls for combat:
-1. Call initCombatTool to generate the map and set up tokens (player + enemies + objectives)
-2. Take the frameData from the result and pass it to frameBuilderTool as-is (type='tactical-map')
-3. Call yieldToPlayer({ waitingFor: 'combat-result' }) — the client will run the combat
-4. When the player sends [combat-result] victory/defeat/escape {...}, continue the story based on the outcome
-5. If player sends [combat-freetext][state:{...}], use combatEventTool to inject events, then use frameBuilderTool to send an updated tactical-map frame with the modified state
-
-TOKEN SETUP GUIDELINES:
-- Player token: type='player', use protagonist name, place at left side (col 1-2), hp from playerStatsTool
-- Enemies: type='enemy', varied positions on right side, appropriate hp/attack for story difficulty
-- Objectives: type='objective', icon='⭐' or relevant emoji, placed at strategic locations
-- Terrain: add 3-6 terrain cells for cover/obstacles to make combat interesting
-
-LAYERED MAP WORKFLOW (region → area → combat):
-1. REGION MAP: When player arrives at a new part of the world, show a map frame with type='map', mapData.level='region'. Locations represent major areas (cities, forests, dungeons). Player clicks to choose where to go.
-2. AREA MAP: When player enters an area, show a map frame with mapData.level='area'. Locations are specific points (dungeon entrance, guard post, treasure room). Add encounterType='combat' for combat encounters, 'dialogue' for NPCs, 'explore' for discovery.
-3. COMBAT ENCOUNTER: When player clicks a combat-type location (you receive their choice), call initCombatTool to set up the tactical battle, pass the frameData to frameBuilderTool, then yieldToPlayer.
-4. COMBAT RESULT: Player's [combat-result] message tells you victory/defeat/escape. Continue the story.
-5. FREE TEXT IN COMBAT: [combat-freetext][state:{...}] — use combatEventTool to inject events, send updated tactical-map frame.`;
+GENERAL RULE: Alternate between narrative dialogue frames AND gameplay frames. Do not have more than 3 consecutive pure-narrative frames without adding a skill-check, choice, or interactive moment.`;
 }
 
 // ─── Agent factory (per-request, with sessionId bound in tools/prompt) ────────
 
 export function createStorytellerAgent(vnPackage: VNPackage, sessionId: string) {
-  const google = createGoogleGenerativeAI({ apiKey: process.env.GEMINI_API_KEY! });
-
   return new ToolLoopAgent({
-    model: google(MODEL_ID),
+    model: getGoogleModel('storyteller'),
     instructions: buildDMSystemPrompt(vnPackage, sessionId),
     tools: {
       plotStateTool,

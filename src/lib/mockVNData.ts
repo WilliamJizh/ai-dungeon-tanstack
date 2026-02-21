@@ -307,6 +307,35 @@ export const PREVIEW_GROUPS: PreviewGroup[] = [
     ],
   },
 
+  // ── DICE ROLL ─────────────────────────────────────────────────────────────────
+  {
+    label: 'DICE ROLL',
+    variants: [
+      {
+        label: '1d20',
+        frame: {
+          id: 'dr-d20', type: 'dice-roll' as const, hud: HUD,
+          panels: [{ id: 'center' as const, backgroundAsset: 'bg_city' }],
+          diceRoll: {
+            diceNotation: '1d20',
+            description: 'Rolling Intelligence',
+          },
+        },
+      },
+      {
+        label: '2d6',
+        frame: {
+          id: 'dr-2d6', type: 'dice-roll' as const, hud: HUD2,
+          panels: [{ id: 'center' as const, backgroundAsset: 'bg_outpost' }],
+          diceRoll: {
+            diceNotation: '2d6',
+            description: 'Damage Roll',
+          },
+        },
+      },
+    ],
+  },
+
   // ── SKILL CHECK ───────────────────────────────────────────────────────────────
   {
     label: 'SKILL CHECK',

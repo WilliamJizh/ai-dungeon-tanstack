@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { isToolUIPart } from 'ai';
 import type { PlanningUIMessage } from '../../../server/vn/agents/planningChatAgent';
+import { FONT_MAIN } from '../../lib/fonts';
 
 type Part = PlanningUIMessage['parts'][number];
 
@@ -35,7 +36,7 @@ function StateChip({ state }: { state: string }) {
     state === 'input-streaming' ? '░ streaming…' :
     state;
   return (
-    <span style={{ fontSize: 11, color, letterSpacing: '.08em', fontFamily: "VT323,'Courier New',monospace" }}>
+    <span style={{ fontSize: 11, color, letterSpacing: '.08em', fontFamily: FONT_MAIN }}>
       {label}
     </span>
   );
@@ -155,7 +156,7 @@ function FinalizePackageWidget({ part }: { part: Part }) {
           letterSpacing: '.12em',
           color: 'rgba(80,220,120,.9)',
           textDecoration: 'none',
-          fontFamily: "VT323,'Courier New',monospace",
+          fontFamily: FONT_MAIN,
         }}
       >
         PLAY ▶
@@ -201,7 +202,7 @@ export function ToolCallWidget({ part }: ToolCallWidgetProps) {
         border: `1px solid ${subtle}`,
         borderRadius: 4,
         padding: '8px 12px',
-        fontFamily: "VT323,'Courier New',monospace",
+        fontFamily: FONT_MAIN,
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: part.state !== 'input-streaming' ? 4 : 0 }}>

@@ -1,5 +1,5 @@
-import { v4 as uuidv4 } from 'uuid';
 import { appendTraceStep, completeTrace, createTrace } from './traceStore.js';
+import { MODEL_IDS } from '../lib/modelFactory.js';
 
 /**
  * Creates an onStepFinish callback + bookkeeping for tracing a ToolLoopAgent
@@ -15,8 +15,16 @@ export function createPlanChatTrace(opts: {
   sessionId: string;
   requestId?: string;
   modelId?: string;
+  tags?: string[];
+  source?: string;
 }) {
-  const { sessionId, requestId, modelId = process.env.GEMINI_CHAT_MODEL ?? 'gemini-3-flash-preview' } = opts;
+  const {
+    sessionId,
+    requestId,
+    modelId = MODEL_IDS.chat,
+    tags = ['agent', 'plan-chat'],
+    source = 'planChatRoute',
+  } = opts;
 
   const traceId = createTrace(
     {
@@ -26,6 +34,8 @@ export function createPlanChatTrace(opts: {
       agentId: 'planning-chat-agent',
       modelProvider: 'google',
       modelId,
+      tags,
+      source,
     },
     { pipeline: 'vn-plan-chat', sessionId },
     { stage: 'start' },

@@ -3,14 +3,13 @@ import type { PlanDraftState } from '../../hooks/usePlanDraft';
 import { StructureTab } from './StructureTab';
 import { CharactersTab } from './CharactersTab';
 import { MusicTab } from './MusicTab';
+import { FONT_MAIN as font } from '../../lib/fonts';
 
 type Tab = 'structure' | 'characters' | 'music';
 
 interface StoryPanelProps {
   draft: PlanDraftState;
 }
-
-const font = "VT323,'Courier New',monospace";
 const subtle = 'rgba(255,255,255,.18)';
 const gold = 'rgba(255,198,70,.85)';
 

@@ -1,5 +1,9 @@
 @import "tailwindcss";
 
+:root {
+  --font-main: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
 /* ── VN Engine Effects ── */
 @keyframes vn-shake {
   0%, 100% { transform: translateX(0); }

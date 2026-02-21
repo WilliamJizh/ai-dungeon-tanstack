@@ -1,6 +1,6 @@
 import { tool } from 'ai';
 import { z } from 'zod';
-import { generateSceneImage, generateCharacterImage } from '../../agents/imageAgent.js';
+import { generateSceneImage, generateCharacterImage } from '../../lib/imageGen.js';
 
 /**
  * Generates a background scene or character portrait using Gemini image generation.
@@ -17,7 +17,7 @@ export const imageGenTool = tool({
   }),
   execute: async ({ assetId, prompt, type, aspectRatio }) => {
     const result = type === 'character'
-      ? await generateCharacterImage(prompt, aspectRatio as '1:1' | '4:3' | '3:4')
+      ? await generateCharacterImage(prompt, { aspectRatio: aspectRatio as '1:1' | '4:3' | '3:4' })
       : await generateSceneImage(prompt, { aspectRatio });
 
     return {

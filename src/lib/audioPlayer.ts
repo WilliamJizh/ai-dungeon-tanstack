@@ -1,6 +1,6 @@
 /**
- * Singleton Web Audio API player for raw PCM music files.
- * PCM format: 24kHz, 1 channel (mono), 16-bit signed little-endian.
+ * Singleton Web Audio API player for WAV music files.
+ * Uses Web Audio for seamless looping (HTML audio element has loop-gap issues).
  */
 
 let audioCtx: AudioContext | null = null;
@@ -11,7 +11,7 @@ let muted = false;
 
 function getContext(): AudioContext {
   if (!audioCtx) {
-    audioCtx = new AudioContext({ sampleRate: 24000 });
+    audioCtx = new AudioContext();
     gainNode = audioCtx.createGain();
     gainNode.connect(audioCtx.destination);
   }
@@ -30,14 +30,7 @@ async function play(url: string): Promise<void> {
 
   const response = await fetch(url);
   const arrayBuffer = await response.arrayBuffer();
-  const int16 = new Int16Array(arrayBuffer);
-  const numSamples = int16.length;
-
-  const audioBuffer = ctx.createBuffer(1, numSamples, 24000);
-  const channelData = audioBuffer.getChannelData(0);
-  for (let i = 0; i < numSamples; i++) {
-    channelData[i] = int16[i] / 32768;
-  }
+  const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
 
   sourceNode = ctx.createBufferSource();
   sourceNode.buffer = audioBuffer;

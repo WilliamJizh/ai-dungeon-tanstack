@@ -1,17 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from '@tanstack/react-router';
 import { useLocale } from '../context/LocaleContext';
+import { LanguageToggle } from '../components/shared/LanguageToggle';
 import { useScaleManager } from '../hooks/useScaleManager';
-import { FullScreenFrame } from '../components/vn/frames/FullScreenFrame';
-import { DialogueFrame }   from '../components/vn/frames/DialogueFrame';
-import { ThreePanelFrame } from '../components/vn/frames/ThreePanelFrame';
-import { ChoiceFrame }     from '../components/vn/frames/ChoiceFrame';
-import { BattleFrame }     from '../components/vn/frames/BattleFrame';
-import { SkillCheckFrame } from '../components/vn/frames/SkillCheckFrame';
-import { InventoryFrame }  from '../components/vn/frames/InventoryFrame';
-import { MapFrame }        from '../components/vn/frames/MapFrame';
+import { FONT_MAIN } from '../lib/fonts';
 import { TacticalMapFrame } from '../components/vn/frames/TacticalMapFrame';
 import { FrameEffects }    from '../components/vn/FrameEffects';
+import { resolveFrameEntry, type BaseFrameProps } from '../lib/frameRegistry';
 import { MOCK_PACK, PREVIEW_GROUPS } from '../lib/mockVNData';
 import type { VNFrame }    from '../../server/vn/types/vnFrame';
 
@@ -43,67 +38,29 @@ export function VNFramePreviewPage() {
   });
 
   const renderFrame = (frame: VNFrame) => {
-    const common = {
+    // tactical-map needs dedicated props — explicit branch
+    if (frame.type === 'tactical-map') {
+      return (
+        <TacticalMapFrame
+          frame={frame}
+          pack={MOCK_PACK}
+          onCombatComplete={(result, summary) => console.log('[preview] combat complete:', result, summary)}
+          onFreeText={(text, _state) => console.log('[preview] free text:', text)}
+        />
+      );
+    }
+
+    const entry = resolveFrameEntry(frame);
+    const baseProps: BaseFrameProps = {
       frame,
       pack: MOCK_PACK,
       onAdvance: handleAdvance,
+      onChoiceSelect: () => handleAdvance(),
+      onFreeTextSubmit: () => handleAdvance(),
       isMuted: true,
       onToggleMute: () => {},
     };
-
-    switch (frame.type) {
-      case 'full-screen':
-        return <FullScreenFrame {...common} />;
-      case 'dialogue':
-        if (
-          frame.dialogue?.targetPanel === 'center'
-          || !frame.panels.some(p => p.id === 'left' || p.id === 'right')
-        ) {
-          return <FullScreenFrame {...common} />;
-        }
-        return <DialogueFrame {...common} />;
-      case 'three-panel':
-        return <ThreePanelFrame {...common} />;
-      case 'choice':
-        return (
-          <ChoiceFrame
-            {...common}
-            onChoiceSelect={(_id) => handleAdvance()}
-            onFreeTextSubmit={(_text) => handleAdvance()}
-          />
-        );
-      case 'battle':
-        return <BattleFrame {...common} onChoiceSelect={(_id) => handleAdvance()} />;
-      case 'skill-check':
-        return <SkillCheckFrame {...common} />;
-      case 'inventory':
-        return (
-          <InventoryFrame
-            {...common}
-            onChoiceSelect={(_id) => handleAdvance()}
-          />
-        );
-      case 'map':
-        return (
-          <MapFrame
-            {...common}
-            onChoiceSelect={(_id) => handleAdvance()}
-          />
-        );
-      case 'tactical-map':
-        return (
-          <TacticalMapFrame
-            frame={frame}
-            pack={MOCK_PACK}
-            onCombatComplete={(result, summary) => console.log('[preview] combat complete:', result, summary)}
-            onFreeText={(text, _state) => console.log('[preview] free text:', text)}
-          />
-        );
-      case 'character-sheet':
-        return <FullScreenFrame {...common} />;
-      default:
-        return <FullScreenFrame {...common} />;
-    }
+    return <entry.component {...(entry.makeProps ? entry.makeProps(baseProps) : baseProps)} />;
   };
 
   return (
@@ -113,7 +70,7 @@ export function VNFramePreviewPage() {
         width: '100vw',
         height: '100vh',
         background: '#050505',
-        fontFamily: "VT323, 'Courier New', monospace",
+        fontFamily: FONT_MAIN,
         overflow: 'hidden',
       }}
     >
@@ -174,7 +131,7 @@ export function VNFramePreviewPage() {
                       fontSize: 15,
                       letterSpacing: '.1em',
                       color: active ? 'rgba(255,255,255,.85)' : 'rgba(255,255,255,.36)',
-                      fontFamily: "VT323, 'Courier New', monospace",
+                      fontFamily: FONT_MAIN,
                     }}
                   >
                     {active ? '▸' : '·'}&nbsp;&nbsp;{v.label}
@@ -197,26 +154,11 @@ export function VNFramePreviewPage() {
           >
             ← VN HOME
           </Link>
-          <button
-            onClick={() => setLocale(locale === 'en' ? 'zh-CN' : 'en')}
-            style={{
-              display: 'block',
-              marginTop: 12,
-              fontSize: 14,
-              letterSpacing: '.2em',
-              color: 'rgba(255,255,255,.5)',
-              background: 'none',
-              border: '1px solid rgba(255,255,255,.15)',
-              borderRadius: 3,
-              padding: '5px 12px',
-              cursor: 'pointer',
-              fontFamily: "VT323, 'Courier New', monospace",
-              width: '100%',
-              textAlign: 'left' as const,
-            }}
-          >
-            {locale === 'en' ? '中文 ZH-CN' : 'ENGLISH EN'}
-          </button>
+          <LanguageToggle
+            locale={locale}
+            onToggle={() => setLocale(locale === 'en' ? 'zh-CN' : 'en')}
+            style={{ display: 'block', marginTop: 12, width: '100%', textAlign: 'left' }}
+          />
         </div>
       </div>
 

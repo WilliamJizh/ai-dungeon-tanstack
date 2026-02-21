@@ -6,9 +6,13 @@ import type { VNFrame } from '../../server/vn/types/vnFrame';
 import type { StorytellerUIMessage } from '../../server/vn/agents/storytellerChatAgent';
 import type { VNPackage } from '../../server/vn/types/vnTypes';
 import { useVN } from '../context/VNContext';
+import { useLocale } from '../context/LocaleContext';
 import { useScaleManager } from '../hooks/useScaleManager';
 import { VNRenderer } from '../components/vn/VNRenderer';
+import { LanguageToggle } from '../components/shared/LanguageToggle';
 import { audioPlayer } from '../lib/audioPlayer';
+import { FONT_MAIN } from '../lib/fonts';
+import { t } from '../lib/i18n';
 
 // ─── Inner component — keyed on sessionId+sceneId so useChat resets each scene ─
 
@@ -126,6 +130,7 @@ function StorytellerSession({
 export function VNEnginePage() {
   const navigate = useNavigate();
   const { isHydrated, vnPackage, sessionId, currentSceneId, advanceScene } = useVN();
+  const { locale, setLocale } = useLocale();
   const [isMuted, setIsMuted] = useState(false);
 
   const { containerRef, canvasStyle, isViewportTooSmall } = useScaleManager({
@@ -171,14 +176,14 @@ export function VNEnginePage() {
           height: '100vh',
           background: '#000',
           color: 'rgba(255,255,255,.4)',
-          fontFamily: "VT323, 'Courier New', monospace",
+          fontFamily: FONT_MAIN,
           fontSize: 16,
           letterSpacing: '.2em',
           textAlign: 'center',
           padding: 20,
         }}
       >
-        PLEASE RESIZE YOUR WINDOW TO AT LEAST 480PX WIDE
+        {t('resize_warning', locale)}
       </div>
     );
   }
@@ -211,6 +216,13 @@ export function VNEnginePage() {
           onSceneComplete={handleSceneComplete}
           isMuted={isMuted}
           onToggleMute={handleToggleMute}
+        />
+      </div>
+      <div style={{ position: 'absolute', bottom: 12, left: 12, zIndex: 100, opacity: 0.35 }}>
+        <LanguageToggle
+          locale={locale}
+          onToggle={() => setLocale(locale === 'en' ? 'zh-CN' : 'en')}
+          style={{ fontSize: 11, padding: '3px 8px' }}
         />
       </div>
     </div>

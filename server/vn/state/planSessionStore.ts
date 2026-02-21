@@ -39,28 +39,36 @@ export interface PlanDraftScene {
   musicUrl?: string;
 }
 
+export interface PlanDraftReferenceImage {
+  url: string;       // data URL from AI SDK FileUIPart
+  mediaType: string; // e.g. 'image/png'
+}
+
 export interface PlanDraft {
   premise?: PlanDraftPremise;
   characters: PlanDraftCharacter[];
   acts: PlanDraftAct[];
   scenes: PlanDraftScene[];
+  referenceImages: PlanDraftReferenceImage[];
 }
 
 export interface PlanSession {
   sessionId: string;
   packageId: string;
+  language: string;
   draft: PlanDraft;
   createdAt: Date;
 }
 
 const store = new Map<string, PlanSession>();
 
-export function getOrCreatePlanSession(sessionId: string): PlanSession {
+export function getOrCreatePlanSession(sessionId: string, language = 'en'): PlanSession {
   if (!store.has(sessionId)) {
     store.set(sessionId, {
       sessionId,
       packageId: uuidv4(),
-      draft: { characters: [], acts: [], scenes: [] },
+      language,
+      draft: { characters: [], acts: [], scenes: [], referenceImages: [] },
       createdAt: new Date(),
     });
   }

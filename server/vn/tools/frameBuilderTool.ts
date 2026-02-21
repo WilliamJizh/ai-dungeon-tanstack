@@ -1,6 +1,7 @@
 import { tool } from 'ai';
 import { z } from 'zod';
-import { VNFrameSchema, type VNFrame } from '../types/vnFrame.js';
+import { VNFrameSchema, FrameTypeSchema, type VNFrame } from '../types/vnFrame.js';
+import { FRAME_REGISTRY_MAP } from '../frameRegistry.js';
 
 // Schema for tool input: VNFrame without internal _meta field
 const FrameInputSchema = VNFrameSchema.omit({ _meta: true });
@@ -18,7 +19,7 @@ const LegacyPanelSchema = z.object({
 
 const LegacyFrameSchema = z.object({
   id: z.string(),
-  type: z.enum(['full-screen', 'dialogue', 'three-panel', 'choice', 'battle', 'transition', 'skill-check', 'inventory', 'map', 'character-sheet', 'tactical-map']),
+  type: FrameTypeSchema,
   panels: z.array(LegacyPanelSchema).optional(),
   dialogue: z.object({
     speaker: z.string().optional(),
@@ -155,9 +156,7 @@ function normalizeLegacyFrame(frame: z.infer<typeof LegacyFrameSchema>): z.infer
   };
 
   if (
-    (normalizedFrame.type === 'full-screen'
-      || normalizedFrame.type === 'dialogue'
-      || normalizedFrame.type === 'three-panel')
+    FRAME_REGISTRY_MAP.get(normalizedFrame.type)?.requiresNarration
     && !normalizedFrame.dialogue?.text
     && !normalizedFrame.narration?.text
   ) {
@@ -172,7 +171,7 @@ function ensureRenderableFrame(frame: z.infer<typeof FrameInputSchema>): z.infer
   const ensured = { ...frame, panels };
 
   if (
-    (ensured.type === 'full-screen' || ensured.type === 'dialogue' || ensured.type === 'three-panel')
+    FRAME_REGISTRY_MAP.get(ensured.type)?.requiresNarration
     && !ensured.dialogue?.text
     && !ensured.narration?.text
   ) {

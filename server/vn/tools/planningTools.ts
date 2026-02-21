@@ -4,8 +4,8 @@ import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { v4 as uuidv4 } from 'uuid';
-import { generateSceneImage, generateCharacterImage } from '../../agents/imageAgent.js';
-import { generateAmbientMusic } from '../../agents/musicAgent.js';
+import { generateSceneImage, generateCharacterImage } from '../../lib/imageGen.js';
+import { generateAmbientMusic, pcmToWav } from '../../lib/musicGen.js';
 import { VNPackageSchema } from '../types/vnTypes.js';
 import { db } from '../../db/index.js';
 import { vnPackages } from '../../db/schema.js';
@@ -21,6 +21,12 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 function assetDir(packageId: string) {
   return path.join(__dirname, '..', '..', '..', 'public', 'generated', packageId);
+}
+
+function dataUrlToBase64(dataUrl: string): { base64: string; mimeType: string } {
+  const [prefix, base64] = dataUrl.split(',');
+  const mimeType = prefix.split(':')[1].split(';')[0];
+  return { base64, mimeType };
 }
 
 // ─── proposeStoryPremise ─────────────────────────────────────────────────────
@@ -109,7 +115,11 @@ export function createPlanningTools(session: PlanSession) {
       inputSchema: proposeCharacterInput,
       execute: async (input) => {
         const artStyle = draft.premise?.artStyle ?? '';
-        const img = await generateCharacterImage(`${artStyle}. ${input.imagePrompt}`);
+        const latestRef = draft.referenceImages.at(-1);
+        const refOpts = latestRef ? dataUrlToBase64(latestRef.url) : undefined;
+        const img = await generateCharacterImage(`${artStyle}. ${input.imagePrompt}`, {
+          ...(refOpts ? { referenceImageB64: refOpts.base64, referenceImageMimeType: refOpts.mimeType } : {}),
+        });
         const dir = assetDir(packageId);
         await fs.mkdir(dir, { recursive: true });
         await fs.writeFile(path.join(dir, `${input.id}.png`), Buffer.from(img.base64, 'base64'));
@@ -153,14 +163,18 @@ export function createPlanningTools(session: PlanSession) {
         const dir = assetDir(packageId);
         await fs.mkdir(dir, { recursive: true });
 
+        const latestRef = draft.referenceImages.at(-1);
+        const refOpts = latestRef ? dataUrlToBase64(latestRef.url) : undefined;
         const [img, mus] = await Promise.all([
-          generateSceneImage(`${artStyle}. ${input.backgroundPrompt}`),
+          generateSceneImage(`${artStyle}. ${input.backgroundPrompt}`, {
+            ...(refOpts ? { referenceImageB64: refOpts.base64, referenceImageMimeType: refOpts.mimeType } : {}),
+          }),
           generateAmbientMusic(input.musicPrompts),
         ]);
 
         await Promise.all([
           fs.writeFile(path.join(dir, `${input.location}.png`), Buffer.from(img.base64, 'base64')),
-          fs.writeFile(path.join(dir, `${input.mood}.pcm`), mus.pcmBuffer),
+          fs.writeFile(path.join(dir, `${input.mood}.wav`), pcmToWav(mus.pcmBuffer)),
         ]);
 
         const scene: PlanDraftScene = {
@@ -174,7 +188,7 @@ export function createPlanningTools(session: PlanSession) {
           mood: input.mood,
           backgroundUrl: `/generated/${packageId}/${input.location}.png`,
           backgroundMimeType: img.mimeType,
-          musicUrl: `/generated/${packageId}/${input.mood}.pcm`,
+          musicUrl: `/generated/${packageId}/${input.mood}.wav`,
         };
 
         const idx = draft.scenes.findIndex(s => s.id === input.id);
@@ -259,7 +273,7 @@ export function createPlanningTools(session: PlanSession) {
             backgrounds[scene.location] = { url: scene.backgroundUrl, mimeType: scene.backgroundMimeType };
           }
           if (scene.musicUrl) {
-            music[scene.mood] = { url: scene.musicUrl, mimeType: 'audio/pcm' };
+            music[scene.mood] = { url: scene.musicUrl, mimeType: 'audio/wav' };
           }
         }
 

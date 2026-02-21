@@ -10,6 +10,8 @@ export async function traceRoutes(app: FastifyInstance) {
       pipeline?: string;
       agentId?: string;
       status?: string;
+      source?: string;
+      tag?: string;
       from?: string;
       to?: string;
       limit?: string;
@@ -22,6 +24,8 @@ export async function traceRoutes(app: FastifyInstance) {
       pipeline: req.query.pipeline,
       agentId: req.query.agentId,
       status: req.query.status,
+      source: req.query.source,
+      tag: req.query.tag,
       from: req.query.from,
       to: req.query.to,
       limit: req.query.limit ? Number(req.query.limit) : undefined,

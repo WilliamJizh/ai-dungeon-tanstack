@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, lte } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, like, lte } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '../db/index.js';
 import { aiTraceSteps, aiTraces } from '../db/schema.js';
@@ -11,6 +11,10 @@ export interface TraceContext {
   agentId: string;
   modelProvider: string;
   modelId: string;
+  /** Category tags for filtering e.g. ['image-gen', 'scene']. */
+  tags?: string[];
+  /** Call origin for filtering e.g. 'imageAgent.generateSceneImage'. */
+  source?: string;
 }
 
 export interface TraceStepInput {
@@ -40,6 +44,8 @@ export function createTrace(context: TraceContext, input: unknown, meta: Record<
     status: 'running',
     inputJson: safeJsonStringify(input),
     metaJson: safeJsonStringify(meta),
+    tags: context.tags ? JSON.stringify(context.tags) : null,
+    source: context.source ?? null,
   }).run();
   return traceId;
 }
@@ -86,6 +92,10 @@ export interface ListTraceFilters {
   pipeline?: string;
   agentId?: string;
   status?: string;
+  /** Exact match on the source column e.g. 'imageAgent.generateSceneImage'. */
+  source?: string;
+  /** Filter traces containing this tag in their JSON array e.g. 'image-gen'. */
+  tag?: string;
   from?: string;
   to?: string;
   limit?: number;
@@ -108,6 +118,9 @@ export function listTraces(filters: ListTraceFilters) {
   if (filters.pipeline) conditions.push(eq(aiTraces.pipeline, filters.pipeline));
   if (filters.agentId) conditions.push(eq(aiTraces.agentId, filters.agentId));
   if (filters.status) conditions.push(eq(aiTraces.status, filters.status));
+  if (filters.source) conditions.push(eq(aiTraces.source, filters.source));
+  // Tags is stored as a JSON array string; LIKE '%"tag"%' checks array membership.
+  if (filters.tag) conditions.push(like(aiTraces.tags, `%"${filters.tag}"%`));
   if (filters.from) conditions.push(gte(aiTraces.createdAt, filters.from));
   if (filters.to) conditions.push(lte(aiTraces.createdAt, filters.to));
 
@@ -123,6 +136,7 @@ export function listTraces(filters: ListTraceFilters) {
 
   return rows.map((row) => ({
     ...row,
+    tags: parseJsonField(row.tags) as string[] | null,
     input: parseJsonField(row.inputJson),
     output: parseJsonField(row.outputJson),
     error: parseJsonField(row.errorJson),
@@ -150,6 +164,7 @@ export function getTraceById(traceId: string) {
 
   return {
     ...trace,
+    tags: parseJsonField(trace.tags) as string[] | null,
     input: parseJsonField(trace.inputJson),
     output: parseJsonField(trace.outputJson),
     error: parseJsonField(trace.errorJson),

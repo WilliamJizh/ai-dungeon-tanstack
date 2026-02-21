@@ -2,10 +2,12 @@ export type Locale = 'en' | 'zh-CN';
 
 const translations: Record<Locale, Record<string, string>> = {
   en: {
+    // ── Gameplay frames ──────────────────────────────────────────────────────
     continue_hint: 'SPACE / CLICK TO CONTINUE',
     check_label: 'CHECK',
     dc_label: 'DC',
     result_label: 'RESULT',
+    rolled_label: 'YOU ROLLED',
     success: 'SUCCESS',
     failure: 'FAILURE',
     inventory_title: '[ INVENTORY ]',
@@ -23,12 +25,32 @@ const translations: Record<Locale, Record<string, string>> = {
     round_label: 'ROUND',
     dm_thinking: 'DM',
     scene_start: '[scene start]',
+    // ── Frame HUD / controls ─────────────────────────────────────────────────
+    active_status: 'ACTIVE',
+    inactive_status: 'INACTIVE',
+    narrator: 'NARRATOR',
+    next_hint: '[SPACE] NEXT',
+    free_text_placeholder: 'WRITE YOUR ACTION...',
+    muted: '[MUTED]',
+    sound: '[SND]',
+    // ── Page UI ──────────────────────────────────────────────────────────────
+    story_builder: 'STORY BUILDER',
+    nav_traces: 'TRACES',
+    nav_projects: 'PROJECTS',
+    nav_play: 'PLAY ▶',
+    past_projects: 'Past Projects',
+    back_to_new: 'Back to New Story',
+    loading_projects: 'Loading generated projects...',
+    no_projects: 'No generated projects yet.',
+    resize_warning: 'PLEASE RESIZE YOUR WINDOW TO AT LEAST 480PX WIDE',
   },
   'zh-CN': {
+    // ── Gameplay frames ──────────────────────────────────────────────────────
     continue_hint: '按空格 / 点击继续',
     check_label: '检定',
     dc_label: '难度',
     result_label: '结果',
+    rolled_label: '投出了',
     success: '成功',
     failure: '失败',
     inventory_title: '[ 物品栏 ]',
@@ -46,6 +68,24 @@ const translations: Record<Locale, Record<string, string>> = {
     round_label: '回合',
     dm_thinking: 'DM',
     scene_start: '[scene start]',
+    // ── Frame HUD / controls ─────────────────────────────────────────────────
+    active_status: '在线',
+    inactive_status: '离线',
+    narrator: '旁白',
+    next_hint: '[空格] 继续',
+    free_text_placeholder: '写下你的行动...',
+    muted: '[静音]',
+    sound: '[音效]',
+    // ── Page UI ──────────────────────────────────────────────────────────────
+    story_builder: '故事创作',
+    nav_traces: 'TRACES',
+    nav_projects: '项目',
+    nav_play: '开始 ▶',
+    past_projects: '历史项目',
+    back_to_new: '返回新故事',
+    loading_projects: '正在加载项目...',
+    no_projects: '暂无生成项目。',
+    resize_warning: '请将窗口调整至至少 480 像素宽',
   },
 };
 

@@ -9,6 +9,10 @@ export interface AIDebugContext {
   agentId: string;
   modelProvider?: string;
   modelId: string;
+  /** Category tags for filtering e.g. ['image-gen', 'scene']. */
+  tags?: string[];
+  /** Call origin for filtering e.g. 'imageAgent.generateSceneImage'. */
+  source?: string;
 }
 
 function envBool(name: string, fallback: boolean): boolean {
@@ -33,6 +37,8 @@ function traceContextFrom(input: AIDebugContext): TraceContext {
     agentId: input.agentId,
     modelProvider: input.modelProvider ?? 'google',
     modelId: input.modelId,
+    tags: input.tags,
+    source: input.source,
   };
 }
 
@@ -178,3 +184,37 @@ export async function tracedGenerateObject(input: any, context: AIDebugContext):
   }
 }
 
+/**
+ * Wraps any async native SDK call (e.g. Google GenAI image/music generation)
+ * with trace recording. Pass an inputSummary of safe, non-binary fields only.
+ */
+export async function tracedNativeCall<T>(
+  fn: () => Promise<T>,
+  context: AIDebugContext,
+  inputSummary: Record<string, unknown>,
+): Promise<T> {
+  if (!isTraceEnabled()) return fn();
+
+  const traceId = createTrace(traceContextFrom(context), sanitizeForTrace(inputSummary), {
+    stage: 'start',
+  });
+  const startedAt = Date.now();
+
+  try {
+    const result = await fn();
+    completeTrace({
+      traceId,
+      status: 'success',
+      durationMs: Date.now() - startedAt,
+    });
+    return result;
+  } catch (err) {
+    completeTrace({
+      traceId,
+      status: 'error',
+      durationMs: Date.now() - startedAt,
+      error: serializeError(err),
+    });
+    throw err;
+  }
+}

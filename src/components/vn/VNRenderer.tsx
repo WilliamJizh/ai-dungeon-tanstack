@@ -19,15 +19,9 @@ function buildDefaultHud(pack: VNPackage, currentSceneId: string) {
 }
 
 import { FrameEffects } from './FrameEffects';
-import { FullScreenFrame } from './frames/FullScreenFrame';
-import { DialogueFrame } from './frames/DialogueFrame';
-import { ThreePanelFrame } from './frames/ThreePanelFrame';
-import { ChoiceFrame } from './frames/ChoiceFrame';
-import { BattleFrame } from './frames/BattleFrame';
-import { SkillCheckFrame } from './frames/SkillCheckFrame';
-import { InventoryFrame }  from './frames/InventoryFrame';
-import { MapFrame }        from './frames/MapFrame';
 import { TacticalMapFrame } from './frames/TacticalMapFrame';
+import { resolveFrameEntry, type BaseFrameProps } from '../../lib/frameRegistry';
+import { FONT_MAIN } from '../../lib/fonts';
 
 /* ── Pulsing dots CSS (injected once) ────────────────────────────────────── */
 const PULSE_STYLE_ID = 'vn-pulse-dots';
@@ -185,61 +179,36 @@ export function VNRenderer({
 
   const defaultHud = buildDefaultHud(pack, currentSceneId);
 
-  const frameProps = {
-    frame: { ...displayFrame, hud: displayFrame.hud ?? defaultHud },
-    pack,
-    onAdvance: handleAdvance,
-    onChoiceSelect: handleChoiceSelect,
-    onFreeTextSubmit: handleFreeTextSubmit,
-    isMuted,
-    onToggleMute,
-  };
-
   const renderFrame = () => {
-    switch (displayFrame.type) {
-      case 'full-screen':
-        return <FullScreenFrame {...frameProps} />;
-      case 'dialogue':
-        if (
-          displayFrame.dialogue?.targetPanel === 'center' ||
-          !displayFrame.panels.some((p) => p.id === 'left' || p.id === 'right')
-        ) {
-          return <FullScreenFrame {...frameProps} />;
-        }
-        return <DialogueFrame {...frameProps} />;
-      case 'three-panel':
-        return <ThreePanelFrame {...frameProps} />;
-      case 'choice':
-        return <ChoiceFrame {...frameProps} />;
-      case 'battle':
-        return <BattleFrame {...frameProps} />;
-      case 'skill-check':
-        return <SkillCheckFrame {...frameProps} />;
-      case 'inventory':
-        return <InventoryFrame {...frameProps} />;
-      case 'map':
-        return <MapFrame {...frameProps} />;
-      case 'tactical-map':
-        return (
-          <TacticalMapFrame
-            frame={displayFrame}
-            pack={pack}
-            onCombatComplete={(result, summary) => {
-              setCurrentIndex(frames.length);
-              onPlayerAction(`[combat-result] ${result} ${JSON.stringify({ summary, round: (displayFrame as any).tacticalMapData?.combat?.round })}`);
-            }}
-            onFreeText={(text, stateJson) => {
-              onPlayerAction(`[combat-freetext][state:${stateJson}] ${text}`);
-            }}
-          />
-        );
-      case 'character-sheet':
-        return <FullScreenFrame {...frameProps} />;
-      case 'transition':
-        return <FullScreenFrame {...frameProps} />;
-      default:
-        return <FullScreenFrame {...frameProps} />;
+    // tactical-map needs closures over setCurrentIndex/frames.length — explicit branch
+    if (displayFrame.type === 'tactical-map') {
+      return (
+        <TacticalMapFrame
+          frame={displayFrame}
+          pack={pack}
+          onCombatComplete={(result, summary) => {
+            setCurrentIndex(frames.length);
+            onPlayerAction(`[combat-result] ${result} ${JSON.stringify({ summary, round: (displayFrame as any).tacticalMapData?.combat?.round })}`);
+          }}
+          onFreeText={(text, stateJson) => {
+            onPlayerAction(`[combat-freetext][state:${stateJson}] ${text}`);
+          }}
+        />
+      );
     }
+
+    const entry = resolveFrameEntry(displayFrame);
+    const baseProps: BaseFrameProps = {
+      frame: { ...displayFrame, hud: displayFrame.hud ?? defaultHud },
+      pack,
+      onAdvance: handleAdvance,
+      onChoiceSelect: handleChoiceSelect,
+      onFreeTextSubmit: handleFreeTextSubmit,
+      isMuted,
+      onToggleMute,
+    };
+    const props = entry.makeProps ? entry.makeProps(baseProps) : baseProps;
+    return <entry.component {...props} />;
   };
 
   return (
@@ -284,7 +253,7 @@ export function VNRenderer({
           bottom: 10,
           right: 12,
           zIndex: 200,
-          fontFamily: "VT323, 'Courier New', monospace",
+          fontFamily: FONT_MAIN,
           fontSize: 13,
           color: 'rgba(255,255,255,.35)',
           letterSpacing: '.12em',

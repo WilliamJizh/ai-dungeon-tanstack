@@ -1,9 +1,10 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import type { VNFrame } from '../../../../server/vn/types/vnFrame';
 import type { VNPackage } from '../../../../server/vn/types/vnTypes';
 import { resolveAsset } from '../../../lib/resolveAsset';
 import { t } from '../../../lib/i18n';
 import { useLocale } from '../../../context/LocaleContext';
+import { FONT_MAIN } from '../../../lib/fonts';
 
 interface SkillCheckFrameProps {
   frame: VNFrame;
@@ -12,15 +13,21 @@ interface SkillCheckFrameProps {
 }
 
 /**
- * Skill-check frame: dice roll overlay with stat card, DC bar, and outcome banner.
- *
- * Layout: full-screen darkened background with centered card showing roll result.
+ * Skill-check frame: pure result display — stat card, DC bar, outcome banner.
+ * No dice animation (that's handled by the preceding dice-roll frame).
  * Click / Space to continue.
  */
 export function SkillCheckFrame({ frame, pack, onAdvance }: SkillCheckFrameProps) {
   const { locale } = useLocale();
   const sc = frame.skillCheck;
   const bg = resolveAsset(frame.panels[0]?.backgroundAsset, pack);
+  const [visible, setVisible] = useState(false);
+
+  // Brief delay so the card fades in rather than popping
+  useEffect(() => {
+    const id = setTimeout(() => setVisible(true), 40);
+    return () => clearTimeout(id);
+  }, []);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -46,22 +53,25 @@ export function SkillCheckFrame({ frame, pack, onAdvance }: SkillCheckFrameProps
         width: '100%',
         height: '100%',
         background: '#000',
-        fontFamily: "VT323, 'Courier New', monospace",
+        fontFamily: FONT_MAIN,
         overflow: 'hidden',
         cursor: 'default',
       }}
     >
       {/* Background */}
-      <div
-        style={{
-          position: 'absolute',
-          inset: 0,
-          backgroundImage: `url(${bg})`,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-          filter: 'grayscale(.5) brightness(.4)',
-        }}
-      />
+      {bg && (
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            backgroundImage: `url(${bg})`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            filter: 'grayscale(.5) brightness(.4)',
+          }}
+        />
+      )}
+
       {/* Gradient overlays */}
       <div
         style={{
@@ -97,13 +107,7 @@ export function SkillCheckFrame({ frame, pack, onAdvance }: SkillCheckFrameProps
             }}
           >
             {frame.hud.chapter}
-            <small
-              style={{
-                fontSize: 11,
-                display: 'block',
-                color: 'rgba(255,255,255,.2)',
-              }}
-            >
+            <small style={{ fontSize: 11, display: 'block', color: 'rgba(255,255,255,.2)' }}>
               {frame.hud.scene}
             </small>
           </div>
@@ -132,7 +136,7 @@ export function SkillCheckFrame({ frame, pack, onAdvance }: SkillCheckFrameProps
                     fontSize: 11,
                     letterSpacing: '.1em',
                     color: 'rgba(255,255,255,.16)',
-                    fontFamily: "VT323,'Courier New',monospace",
+                    fontFamily: FONT_MAIN,
                     padding: 0,
                   }}
                 >
@@ -144,19 +148,21 @@ export function SkillCheckFrame({ frame, pack, onAdvance }: SkillCheckFrameProps
         </div>
       )}
 
-      {/* Center card */}
+      {/* Result card */}
       <div
         style={{
           position: 'absolute',
           top: '50%',
           left: '50%',
-          transform: 'translate(-50%, -50%)',
+          transform: visible ? 'translate(-50%, -50%)' : 'translate(-50%, -46%)',
           width: 420,
-          background: 'rgba(0,0,0,.78)',
+          background: 'rgba(0,0,0,.82)',
           border: '1px solid rgba(255,255,255,.14)',
           borderRadius: 6,
           padding: '28px 32px',
           zIndex: 20,
+          opacity: visible ? 1 : 0,
+          transition: 'opacity 0.4s ease, transform 0.4s ease',
         }}
       >
         {/* Stat name header */}
@@ -179,7 +185,7 @@ export function SkillCheckFrame({ frame, pack, onAdvance }: SkillCheckFrameProps
             fontSize: 14,
             letterSpacing: '.2em',
             color: 'rgba(255,255,255,.35)',
-            marginBottom: 20,
+            marginBottom: 24,
             textAlign: 'center',
             textTransform: 'uppercase',
           }}
@@ -187,77 +193,47 @@ export function SkillCheckFrame({ frame, pack, onAdvance }: SkillCheckFrameProps
           {sc.stat.slice(0, 3).toUpperCase()} {sc.statValue}
         </div>
 
-        {/* Dice display */}
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <div
+        {/* Roll + modifier = total */}
+        <div style={{ textAlign: 'center', marginBottom: 16 }}>
+          <span
             style={{
-              width: 160,
-              height: 160,
-              borderRadius: '50%',
-              border: '2px solid rgba(255,255,255,.22)',
-              background: 'rgba(255,255,255,.04)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
+              fontSize: 16,
+              color: 'rgba(255,255,255,.62)',
+              letterSpacing: '.14em',
             }}
           >
-            <span style={{ fontSize: 80, color: '#fff', lineHeight: 1 }}>{sc.roll}</span>
-          </div>
-          {/* Modifier + total below circle */}
-          <div
-            style={{
-              marginTop: 8,
-              textAlign: 'center',
-            }}
-          >
-            {sc.modifier != null && (
-              <span
-                style={{
-                  fontSize: 14,
-                  color: 'rgba(255,255,255,.45)',
-                  letterSpacing: '.1em',
-                }}
-              >
-                {sc.modifier >= 0 ? `+${sc.modifier}` : `${sc.modifier}`}
-              </span>
-            )}
+            ROLL {sc.roll}
+          </span>
+          {sc.modifier != null && (
             <span
               style={{
-                fontSize: 18,
-                color: 'rgba(255,255,255,.7)',
-                marginLeft: 10,
+                fontSize: 14,
+                color: 'rgba(255,255,255,.45)',
                 letterSpacing: '.1em',
+                marginLeft: 10,
               }}
             >
-              = {sc.total}
+              {sc.modifier >= 0 ? `+ ${sc.modifier}` : `- ${Math.abs(sc.modifier)}`}
             </span>
-          </div>
+          )}
+          <span
+            style={{
+              fontSize: 18,
+              color: 'rgba(255,255,255,.7)',
+              marginLeft: 10,
+              letterSpacing: '.1em',
+            }}
+          >
+            = {sc.total}
+          </span>
         </div>
 
         {/* DC bar */}
-        <div
-          style={{
-            marginTop: 20,
-            display: 'flex',
-            justifyContent: 'space-between',
-          }}
-        >
-          <span
-            style={{
-              fontSize: 16,
-              letterSpacing: '.18em',
-              color: 'rgba(255,255,255,.45)',
-            }}
-          >
+        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+          <span style={{ fontSize: 16, letterSpacing: '.18em', color: 'rgba(255,255,255,.45)' }}>
             {t('dc_label', locale)} {sc.difficulty}
           </span>
-          <span
-            style={{
-              fontSize: 16,
-              letterSpacing: '.18em',
-              color: resultColor,
-            }}
-          >
+          <span style={{ fontSize: 16, letterSpacing: '.18em', color: resultColor }}>
             {t('result_label', locale)} {sc.total}
           </span>
         </div>
@@ -280,12 +256,8 @@ export function SkillCheckFrame({ frame, pack, onAdvance }: SkillCheckFrameProps
             borderRadius: 3,
             fontSize: 22,
             letterSpacing: '.3em',
-            background: succeeded
-              ? 'rgba(74,222,128,.15)'
-              : 'rgba(239,68,68,.15)',
-            border: succeeded
-              ? '1px solid rgba(74,222,128,.3)'
-              : '1px solid rgba(239,68,68,.3)',
+            background: succeeded ? 'rgba(74,222,128,.15)' : 'rgba(239,68,68,.15)',
+            border: succeeded ? '1px solid rgba(74,222,128,.3)' : '1px solid rgba(239,68,68,.3)',
             color: resultColor,
           }}
         >

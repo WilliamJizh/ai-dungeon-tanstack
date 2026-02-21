@@ -15,6 +15,7 @@ import {
 } from '../../../lib/combat/combatEngine';
 import { t } from '../../../lib/i18n';
 import { useLocale } from '../../../context/LocaleContext';
+import { FONT_MAIN as FONT } from '../../../lib/fonts';
 
 interface TacticalMapFrameProps {
   frame: VNFrame;
@@ -24,8 +25,6 @@ interface TacticalMapFrameProps {
 }
 
 type InteractionMode = 'idle' | 'move' | 'attack';
-
-const FONT = "VT323, 'Courier New', monospace";
 
 function getHpColor(hp: number, maxHp: number): string {
   const pct = (hp / maxHp) * 100;

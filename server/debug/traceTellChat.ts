@@ -1,4 +1,5 @@
 import { appendTraceStep, completeTrace, createTrace } from './traceStore.js';
+import { MODEL_IDS } from '../lib/modelFactory.js';
 
 /**
  * Creates an onStepFinish callback + bookkeeping for tracing the storyteller ToolLoopAgent
@@ -14,13 +15,15 @@ export function createTellChatTrace(opts: {
   sessionId: string;
   requestId?: string;
   modelId?: string;
+  tags?: string[];
+  source?: string;
 }) {
   const {
     sessionId,
     requestId,
-    modelId = process.env.GEMINI_STORY_MODEL
-      ?? process.env.GEMINI_TEXT_MODEL
-      ?? 'gemini-3-flash-preview',
+    modelId = MODEL_IDS.storyteller,
+    tags = ['agent', 'storyteller'],
+    source = 'tellChatRoute',
   } = opts;
 
   const traceId = createTrace(
@@ -31,6 +34,8 @@ export function createTellChatTrace(opts: {
       agentId: 'storyteller-chat-agent',
       modelProvider: 'google',
       modelId,
+      tags,
+      source,
     },
     { pipeline: 'vn-tell-chat', sessionId },
     { stage: 'start' },

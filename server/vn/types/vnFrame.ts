@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /** The layout type of a VN frame, determines which React component renders it. */
-export const FrameTypeSchema = z.enum(['full-screen', 'dialogue', 'three-panel', 'choice', 'battle', 'transition', 'skill-check', 'inventory', 'map', 'character-sheet', 'tactical-map']);
+export const FrameTypeSchema = z.enum(['full-screen', 'dialogue', 'three-panel', 'choice', 'battle', 'transition', 'skill-check', 'dice-roll', 'inventory', 'map', 'character-sheet', 'tactical-map']);
 export type FrameType = z.infer<typeof FrameTypeSchema>;
 
 /** Visual effects applied to a frame or panel. Auto-cleared after durationMs. */
@@ -103,7 +103,13 @@ export const VNFrameSchema = z.object({
     durationMs: z.number(),
     titleCard: z.string().optional(),
   }).optional(),
-  /** Skill check / dice roll data — for type='skill-check'. */
+  /** Physics dice roll animation — for type='dice-roll'. */
+  diceRoll: z.object({
+    diceNotation: z.string().describe('Dice notation e.g. "1d20", "2d6", "4d6"'),
+    roll: z.number().optional().describe('Canonical result pre-computed by agent; shown after animation settles. Omit to display actual physics result.'),
+    description: z.string().optional().describe('What is being rolled for, shown as subtitle above the dice'),
+  }).optional(),
+  /** Skill check result display — for type='skill-check'. No dice animation. */
   skillCheck: z.object({
     stat: z.string().describe('Attribute used, e.g. "intelligence", "luck"'),
     statValue: z.number().describe('Current attribute score'),

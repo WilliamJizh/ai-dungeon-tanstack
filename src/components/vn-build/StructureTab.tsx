@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import type { PlanDraftState, DraftAct, DraftScene } from '../../hooks/usePlanDraft';
-
-const font = "VT323,'Courier New',monospace";
+import { FONT_MAIN as font } from '../../lib/fonts';
 const subtle = 'rgba(255,255,255,.18)';
 const gold = 'rgba(255,198,70,.85)';
 const blue = 'rgba(140,210,255,.7)';
