@@ -1,8 +1,42 @@
 import { and, asc, desc, eq, gte, like, lte } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
-import { db } from '../db/index.js';
+import { db, sqlite } from '../db/index.js';
 import { aiTraceSteps, aiTraces } from '../db/schema.js';
 import { safeJsonStringify } from './redact.js';
+
+// Pre-compiled prepared statement for trace step inserts (raw SQL bypasses Drizzle bug)
+const insertStepStmt = sqlite.prepare(`
+  INSERT INTO ai_trace_steps (id, trace_id, step_index, finish_reason, raw_finish_reason,
+    usage_json, request_json, response_json, tool_calls_json, tool_results_json, content_json)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`);
+
+export function appendTraceStep(step: TraceStepInput): void {
+  // AI SDK v3 may return finishReason as an object — ensure it's always a string or null
+  const finishReason = step.finishReason == null ? null
+    : typeof step.finishReason === 'string' ? step.finishReason
+      : JSON.stringify(step.finishReason);
+  const rawFinishReason = step.rawFinishReason == null ? null
+    : typeof step.rawFinishReason === 'string' ? step.rawFinishReason
+      : JSON.stringify(step.rawFinishReason);
+
+  const sql = `INSERT INTO ai_trace_steps (id, trace_id, step_index, finish_reason, raw_finish_reason,
+    usage_json, request_json, response_json, tool_calls_json, tool_results_json, content_json)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+  sqlite.prepare(sql).run(
+    uuidv4(),
+    step.traceId,
+    step.stepIndex,
+    finishReason,
+    rawFinishReason,
+    step.usage === undefined ? null : safeJsonStringify(step.usage),
+    step.request === undefined ? null : safeJsonStringify(step.request),
+    step.response === undefined ? null : safeJsonStringify(step.response),
+    step.toolCalls === undefined ? null : safeJsonStringify(step.toolCalls),
+    step.toolResults === undefined ? null : safeJsonStringify(step.toolResults),
+    step.content === undefined ? null : safeJsonStringify(step.content),
+  );
+}
 
 export interface TraceContext {
   requestId?: string;
@@ -50,26 +84,14 @@ export function createTrace(context: TraceContext, input: unknown, meta: Record<
   return traceId;
 }
 
-export function appendTraceStep(step: TraceStepInput): void {
-  db.insert(aiTraceSteps).values({
-    id: uuidv4(),
-    traceId: step.traceId,
-    stepIndex: step.stepIndex,
-    finishReason: step.finishReason ?? null,
-    rawFinishReason: step.rawFinishReason ?? null,
-    usageJson: step.usage === undefined ? null : safeJsonStringify(step.usage),
-    requestJson: step.request === undefined ? null : safeJsonStringify(step.request),
-    responseJson: step.response === undefined ? null : safeJsonStringify(step.response),
-    toolCallsJson: step.toolCalls === undefined ? null : safeJsonStringify(step.toolCalls),
-    toolResultsJson: step.toolResults === undefined ? null : safeJsonStringify(step.toolResults),
-    contentJson: step.content === undefined ? null : safeJsonStringify(step.content),
-  }).run();
-}
+
+
 
 export function completeTrace(args: {
   traceId: string;
   status: 'success' | 'error';
   durationMs: number;
+  input?: unknown;
   output?: unknown;
   error?: unknown;
   meta?: Record<string, unknown>;
@@ -78,6 +100,7 @@ export function completeTrace(args: {
     .set({
       status: args.status,
       durationMs: args.durationMs,
+      inputJson: args.input !== undefined ? safeJsonStringify(args.input) : undefined,
       outputJson: args.output === undefined ? null : safeJsonStringify(args.output),
       errorJson: args.error === undefined ? null : safeJsonStringify(args.error),
       metaJson: args.meta ? safeJsonStringify(args.meta) : undefined,

@@ -5,7 +5,41 @@ export const FrameTypeSchema = z.enum(['full-screen', 'dialogue', 'three-panel',
 export type FrameType = z.infer<typeof FrameTypeSchema>;
 
 /** Visual effects applied to a frame or panel. Auto-cleared after durationMs. */
-export const EffectTypeSchema = z.enum(['shake', 'flash', 'fade-in', 'fade-out', 'scan-lines', 'vignette-pulse']);
+export const EffectTypeSchema = z.enum([
+  // Camera / Motion
+  'shake',              // Impact, explosion, earthquake
+  'zoom-in',            // Focus on detail, dramatic close-up
+  'zoom-out',           // Reveal wider scene
+  'pan-left',           // Camera slide left
+  'pan-right',          // Camera slide right
+  // Light / Color
+  'flash',              // Bright flash (revelation, lightning, photo)
+  'fade-in',            // Appear from black/color
+  'fade-out',           // Dissolve to black/color
+  'bloom',              // Soft dreamy glow (memory, warmth)
+  'sepia',              // Nostalgic color grade (flashback)
+  'grayscale',          // Desaturated (despair, shock, death)
+  'color-shift',        // Tint shift (mood change) — use `color` param
+  // Distortion
+  'glitch',             // Digital corruption, memory error, unreality
+  'chromatic-aberration', // RGB split (disorientation, psychic)
+  'blur',               // Depth of field / daze / intoxication
+  'ripple',             // Water surface / dream / time distortion
+  'static',             // TV noise (communication cut, jamming)
+  // Overlay / Atmosphere
+  'vignette-pulse',     // Pulsing dark edges (dread, heartbeat)
+  'scan-lines',         // CRT monitor / retro tech / memory
+  'rain',               // Rain overlay particles
+  'snow',               // Snow overlay particles
+  'particles',          // Floating particles (dust, cherry blossoms, embers) — use `color`
+  'fog',                // Mist / fog layer
+  // Dramatic
+  'speed-lines',        // Manga-style motion / sudden action
+  'screen-crack',       // Glass/reality fracture on impact
+  'text-shake',         // Dialogue box trembles (fear, rage, instability)
+  'heartbeat',          // Rhythmic vignette pulse (anxiety, tension)
+  'spotlight',          // Isolate character in darkness
+]);
 
 export const VNEffectSchema = z.object({
   type: EffectTypeSchema,
@@ -54,11 +88,25 @@ export const VNFrameSchema = z.object({
     /** 'bubble' attaches to panel, 'bottom' shows as bottom bar. */
     position: z.enum(['bubble', 'bottom']).optional(),
   }).optional(),
-  /** Narration box (no speaker attribution). */
+  /** Ordered conversation lines within one frame. Replaces single `dialogue`.
+   *  Panels define who's present (up to 3). Renderer auto-shifts panel focus by matching
+   *  speaker name to panel's characterAsset. */
+  conversation: z.array(z.object({
+    speaker: z.string().describe('Character name — renderer matches to panel via characterAsset'),
+    text: z.string(),
+    isNarrator: z.boolean().optional().describe('true = narration beat between dialogue lines, no panel shift'),
+    effect: VNEffectSchema.optional().describe('Effect triggered when this line appears'),
+  })).optional(),
+  /** Narration box (no speaker attribution). @deprecated Use narrations[] instead. */
   narration: z.object({
     text: z.string(),
     panelId: z.string().optional(),
   }).optional(),
+  /** Array of narration beats — player clicks through on same visual. Replaces single `narration`. */
+  narrations: z.array(z.object({
+    text: z.string(),
+    effect: VNEffectSchema.optional().describe('Effect triggered when this beat appears'),
+  })).optional(),
   /** Player choice options. */
   choices: z.array(z.object({
     id: z.string(),

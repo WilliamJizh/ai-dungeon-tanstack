@@ -5,7 +5,7 @@ import { useLocale } from '../context/LocaleContext';
 import { LanguageToggle } from '../components/shared/LanguageToggle';
 import type { VNPackage } from '../../server/vn/types/vnTypes';
 import { StoryPanel } from '../components/vn-build/StoryPanel';
-import type { PlanDraftState, DraftPremise, DraftCharacter, DraftAct } from '../hooks/usePlanDraft';
+import type { PlanDraftState, DraftPremise, DraftCharacter, DraftNode } from '../hooks/usePlanDraft';
 import { FONT_MAIN as font } from '../lib/fonts';
 import { t } from '../lib/i18n';
 
@@ -15,7 +15,7 @@ interface ProjectSummary {
   genre: string;
   artStyle: string;
   createdAt: string;
-  totalScenes: number;
+  totalNodes: number;
   estimatedDuration: string;
   generationMs: number;
 }
@@ -43,22 +43,21 @@ function vnPackageToDraft(pkg: VNPackage): PlanDraftState {
     imagePrompt: c.imagePrompt,
     imageUrl: pkg.assets.characters[c.id]?.url,
   }));
-  const acts: DraftAct[] = pkg.plot.acts.map((act) => ({
-    id: act.id,
-    title: act.title,
-    scenes: act.scenes.map((scene) => ({
-      id: scene.id,
-      actId: act.id,
-      title: scene.title,
-      location: scene.location,
-      beats: scene.beats,
-      exitConditions: scene.exitConditions,
-      mood: scene.mood,
-      backgroundUrl: pkg.assets.backgrounds[scene.location]?.url,
-      musicUrl: pkg.assets.music[scene.mood]?.url,
+  const nodes: DraftNode[] = pkg.plot.nodes.map((node) => ({
+    id: node.id,
+    title: node.title,
+    location: node.location,
+    beats: node.beats.map((b, i) => ({
+      ...b,
+      id: `${node.id}-beat-${i}`,
+      title: `Beat ${i}`
     })),
+    exitConditions: node.exitConditions,
+    mood: node.mood,
+    backgroundUrl: pkg.assets.backgrounds[node.location]?.url,
+    musicUrl: pkg.assets.music[node.mood]?.url,
   }));
-  return { premise, characters, acts, packageId: pkg.id };
+  return { premise, characters, nodes, packageId: pkg.id };
 }
 
 export function VNProjectsPage() {
@@ -297,7 +296,7 @@ export function VNProjectsPage() {
                     Created: {formatDateTime(project.createdAt)}
                   </div>
                   <div style={{ fontSize: 13, color: 'rgba(255,255,255,.66)', letterSpacing: '.06em' }}>
-                    Scenes: {project.totalScenes} · Duration: {project.estimatedDuration} · Generated in: {Math.round(project.generationMs / 1000)}s
+                    Nodes: {project.totalNodes} · Duration: {project.estimatedDuration} · Generated in: {Math.round(project.generationMs / 1000)}s
                   </div>
                   <div style={{ fontSize: 11, color: 'rgba(255,255,255,.42)', letterSpacing: '.06em' }}>
                     ID: {project.id}

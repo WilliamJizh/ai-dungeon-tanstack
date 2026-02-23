@@ -7,6 +7,7 @@ export interface PlanDraftPremise {
   setting: { world: string; era: string; tone: string };
   premise: string;
   themes: string[];
+  globalMaterials: string[];
   possibleEndings: string[];
 }
 
@@ -20,23 +21,35 @@ export interface PlanDraftCharacter {
   imageMimeType?: string;
 }
 
-export interface PlanDraftAct {
-  id: string;
-  title: string;
+export interface PlanDraftBeat {
+  description: string;
+  pacing: string;
+  findings?: string[];
+  interactables?: string[];
+  foreshadowing?: string;
+  objective?: string;
+  nextBeatIfFailed?: string;
 }
 
-export interface PlanDraftScene {
+export interface PlanDraftNode {
   id: string;
-  actId: string;
   title: string;
   location: string;
   requiredCharacters: string[];
-  beats: string[];
-  exitConditions: string[];
+  beats: PlanDraftBeat[];
+  callbacks?: string[];
+  exitConditions: { condition: string; nextNodeId?: string }[];
   mood: string;
   backgroundUrl?: string;
   backgroundMimeType?: string;
   musicUrl?: string;
+}
+
+export interface PlanDraftAct {
+  id: string;
+  title: string;
+  objective: string;
+  nodes: PlanDraftNode[];
 }
 
 export interface PlanDraftReferenceImage {
@@ -48,7 +61,6 @@ export interface PlanDraft {
   premise?: PlanDraftPremise;
   characters: PlanDraftCharacter[];
   acts: PlanDraftAct[];
-  scenes: PlanDraftScene[];
   referenceImages: PlanDraftReferenceImage[];
 }
 
@@ -56,19 +68,21 @@ export interface PlanSession {
   sessionId: string;
   packageId: string;
   language: string;
+  bypassAssets?: boolean;
   draft: PlanDraft;
   createdAt: Date;
 }
 
 const store = new Map<string, PlanSession>();
 
-export function getOrCreatePlanSession(sessionId: string, language = 'en'): PlanSession {
+export function getOrCreatePlanSession(sessionId: string, language = 'en', bypassAssets = false): PlanSession {
   if (!store.has(sessionId)) {
     store.set(sessionId, {
       sessionId,
       packageId: uuidv4(),
       language,
-      draft: { characters: [], acts: [], scenes: [], referenceImages: [] },
+      bypassAssets,
+      draft: { characters: [], acts: [], referenceImages: [] },
       createdAt: new Date(),
     });
   }

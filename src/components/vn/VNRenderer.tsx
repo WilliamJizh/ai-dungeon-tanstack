@@ -4,16 +4,14 @@ import type { VNPackage } from '../../../server/vn/types/vnTypes';
 import { t } from '../../lib/i18n';
 import { useLocale } from '../../context/LocaleContext';
 
-function buildDefaultHud(pack: VNPackage, currentSceneId: string) {
-  for (const [actIdx, act] of pack.plot.acts.entries()) {
-    const scene = act.scenes.find((s) => s.id === currentSceneId);
-    if (scene) {
-      return {
-        chapter: `CH.${actIdx + 1}  ${act.title.toUpperCase()}`,
-        scene: scene.title.toUpperCase(),
-        showNav: true as const,
-      };
-    }
+function buildDefaultHud(pack: VNPackage, currentNodeId: string) {
+  const node = pack.plot.nodes.find((n) => n.id === currentNodeId);
+  if (node) {
+    return {
+      chapter: node.title.toUpperCase(),
+      scene: node.location.toUpperCase(),
+      showNav: true as const,
+    };
   }
   return { chapter: '', scene: '', showNav: true as const };
 }
@@ -40,15 +38,15 @@ if (typeof document !== 'undefined' && !document.getElementById(PULSE_STYLE_ID))
 interface VNRendererProps {
   /** Full accumulated frame list from the agent — grows as new turns complete. */
   frames: VNFrame[];
-  /** undefined = scene not complete yet; string = nextSceneId; null = game over */
-  pendingSceneComplete?: string | null;
+  /** undefined = node not complete yet; string = nextNodeId; null = game over */
+  pendingNodeComplete?: string | null;
   /** True while agent is streaming a turn */
   isLoading: boolean;
   /** Called with choice ID or free-text string when player acts */
   onPlayerAction: (text: string) => void;
   pack: VNPackage;
-  currentSceneId: string;
-  onSceneComplete: (nextSceneId: string) => void;
+  currentNodeId: string;
+  onNodeComplete: (nextNodeId: string) => void;
   isMuted?: boolean;
   onToggleMute?: () => void;
 }
@@ -60,12 +58,12 @@ interface VNRendererProps {
  */
 export function VNRenderer({
   frames,
-  pendingSceneComplete,
+  pendingNodeComplete,
   isLoading,
   onPlayerAction,
   pack,
-  currentSceneId,
-  onSceneComplete,
+  currentNodeId,
+  onNodeComplete,
   isMuted,
   onToggleMute,
 }: VNRendererProps) {
@@ -110,15 +108,15 @@ export function VNRenderer({
 
     if (currentIndex < frames.length - 1) {
       setCurrentIndex((i) => i + 1);
-    } else if (pendingSceneComplete !== undefined) {
-      // End of queue and scene is marked complete
-      if (pendingSceneComplete !== null) {
-        onSceneComplete(pendingSceneComplete);
+    } else if (pendingNodeComplete !== undefined) {
+      // End of queue and node is marked complete
+      if (pendingNodeComplete !== null) {
+        onNodeComplete(pendingNodeComplete);
       }
       // null = game over — do nothing
     }
     // else: end of queue, isLoading = true = more frames coming
-  }, [currentFrame, currentIndex, frames.length, pendingSceneComplete, onSceneComplete]);
+  }, [currentFrame, currentIndex, frames.length, pendingNodeComplete, onNodeComplete]);
 
   const handleChoiceSelect = useCallback(
     (choiceId: string) => {
@@ -132,6 +130,14 @@ export function VNRenderer({
     (text: string) => {
       setCurrentIndex(frames.length); // advance past current frames → wait until next turn arrives
       onPlayerAction(text);
+    },
+    [onPlayerAction, frames.length],
+  );
+
+  const handleDiceResult = useCallback(
+    (value: number) => {
+      setCurrentIndex(frames.length);
+      onPlayerAction(`[dice-result] ${value}`);
     },
     [onPlayerAction, frames.length],
   );
@@ -177,7 +183,7 @@ export function VNRenderer({
     );
   }
 
-  const defaultHud = buildDefaultHud(pack, currentSceneId);
+  const defaultHud = buildDefaultHud(pack, currentNodeId);
 
   const renderFrame = () => {
     // tactical-map needs closures over setCurrentIndex/frames.length — explicit branch
@@ -204,6 +210,7 @@ export function VNRenderer({
       onAdvance: handleAdvance,
       onChoiceSelect: handleChoiceSelect,
       onFreeTextSubmit: handleFreeTextSubmit,
+      onDiceResult: handleDiceResult,
       isMuted,
       onToggleMute,
     };

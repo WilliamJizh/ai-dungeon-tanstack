@@ -2,8 +2,6 @@ import { tool } from 'ai';
 import { z } from 'zod';
 import fs from 'fs/promises';
 import path from 'path';
-import { fileURLToPath } from 'url';
-import { v4 as uuidv4 } from 'uuid';
 import { generateSceneImage, generateCharacterImage } from '../../lib/imageGen.js';
 import { generateAmbientMusic, pcmToWav } from '../../lib/musicGen.js';
 import { VNPackageSchema } from '../types/vnTypes.js';
@@ -11,11 +9,9 @@ import { db } from '../../db/index.js';
 import { vnPackages } from '../../db/schema.js';
 import { vnPackageStore } from '../state/vnPackageStore.js';
 import { renderStoryTree } from '../utils/storyVisualizer.js';
-import type {
-  PlanSession,
-  PlanDraftCharacter,
-  PlanDraftScene,
-} from '../state/planSessionStore.js';
+import type { PlanSession, PlanDraftCharacter } from '../state/planSessionStore.js';
+import { fileURLToPath } from 'node:url';
+import { eq } from 'drizzle-orm';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -42,7 +38,8 @@ const proposeStoryPremiseInput = z.object({
   }),
   premise: z.string().describe('1-2 sentence story premise'),
   themes: z.array(z.string()).describe('Core themes (e.g. ["identity", "redemption"])'),
-  possibleEndings: z.array(z.string()).min(1).describe('2-3 possible endings'),
+  globalMaterials: z.array(z.string()).describe('List of reusable narrative anchors (motifs, character traits, NPC encounters, physical items) to be seeded by the DM'),
+  possibleEndings: z.array(z.string()).min(1).describe('2-3 broad ending categories (e.g. "Bittersweet Victory", "Total Failure")'),
 });
 
 // ─── proposeCharacter ────────────────────────────────────────────────────────
@@ -55,24 +52,54 @@ const proposeCharacterInput = z.object({
   imagePrompt: z.string().describe('Detailed visual prompt for character portrait generation'),
 });
 
-// ─── proposeAct ──────────────────────────────────────────────────────────────
+// ─── draftActOutline ────────────────────────────────────────────────────────
 
-const proposeActInput = z.object({
-  id: z.string().describe('Unique slug for this act, e.g. "act1"'),
-  title: z.string().describe('Act title'),
+const draftActOutlineInput = z.object({
+  id: z.string().describe('Unique slug for the Act (e.g., "act_1_sern")'),
+  title: z.string().describe('Title of the Act'),
+  objective: z.string().describe('The core objective the player is trying to achieve in this Act'),
+  intendedNodes: z.array(z.string()).min(1).describe('An array of unique slugs for the Nodes that will make up this Act. E.g., ["node_loading_dock", "node_server_room"]'),
 });
 
-// ─── proposeScene ────────────────────────────────────────────────────────────
+// ─── draftNodeWeb ───────────────────────────────────────────────────────────
 
-const proposeSceneInput = z.object({
-  actId: z.string().describe('ID of the act this scene belongs to'),
-  id: z.string().describe('Unique slug, e.g. "harbor-night". Used as background asset key.'),
-  title: z.string(),
-  location: z.string().describe('Asset key for background image — must equal this scene id'),
-  requiredCharacters: z.array(z.string()).describe('Character IDs that appear in this scene'),
-  beats: z.array(z.string()).min(1).describe('Narrative beats in order'),
-  exitConditions: z.array(z.string()).min(1).describe('Conditions that end this scene'),
-  mood: z.string().describe('Asset key for music — slug like "tension-theme" or "hope-theme"'),
+const draftNodeWebInput = z.object({
+  actId: z.string().describe('The Act ID these nodes belong to'),
+  nodes: z.array(z.object({
+    id: z.string().describe('The Node ID (must match one of the intendedNodes from the Act outline)'),
+    title: z.string().describe('The Title of the node'),
+    location: z.string().describe('Asset key for background image — must equal this node id'),
+    requiredCharacters: z.array(z.string()).describe('Character IDs that appear in this node'),
+    mood: z.string().describe('Asset key for music — slug like "tension-theme" or "hope-theme"'),
+    callbacks: z.array(z.string()).optional().describe('Instructions for the DM to re-use globalMaterials or reference past emotional states'),
+    exitConditions: z.array(z.object({
+      condition: z.string().describe('Player action or state required to take this exit. E.g. "Player gives the artifact to the cult"'),
+      nextNodeId: z.string().optional().describe('The ID of the next Node to transition to. Use an empty string or omit to end the game only if it is the absolute final act. MUST include fail-forward consequence nodes instead of game overs.'),
+    })).min(1).describe('Networked connections to other nodes.'),
+  })).min(1).describe('The fully connected web of nodes for this act.'),
+});
+
+// ─── draftNodeBeats ─────────────────────────────────────────────────────────
+
+const draftNodeBeatsInput = z.object({
+  actId: z.string().describe('The ID of the Act containing the node'),
+  nodeId: z.string().describe('The ID of the node to populate beats for'),
+  beats: z.array(z.object({
+    description: z.string().describe('The core narrative action or event of this beat'),
+    pacing: z.string().describe('Instructions for the DM on how long the beat should last (e.g., "5-8 frames of rapid back-and-forth dialogue")'),
+    findings: z.array(z.string()).optional().describe('Specific clues uncovered during this exact beat'),
+    interactables: z.array(z.string()).optional().describe('Items relevant or discoverable in this exact beat'),
+    foreshadowing: z.string().optional().describe('Subtle hints to lay the groundwork for future beats, allowing the DM to build tension'),
+    objective: z.string().optional().describe('The specific goal the player must accomplish to successfully complete this beat'),
+    nextBeatIfFailed: z.string().optional().describe('Allows dynamic early exits or branching within a node if the player fails the objective or rolls a Miss'),
+  })).min(1).describe('Ordered narrative beats guiding the storyteller agent'),
+});
+
+// ─── finalizeNode ────────────────────────────────────────────────────────────
+
+const finalizeNodeInput = z.object({
+  actId: z.string().describe('The Act ID'),
+  nodeId: z.string().describe('The ID of the node to finalize and generate assets for'),
   backgroundPrompt: z.string().describe('Visual prompt for background image generation'),
   musicPrompts: z.array(z.object({
     text: z.string(),
@@ -83,8 +110,9 @@ const proposeSceneInput = z.object({
 // ─── updateElement ───────────────────────────────────────────────────────────
 
 const updateElementInput = z.object({
-  type: z.enum(['premise', 'character', 'act', 'scene']),
-  id: z.string().optional().describe('Required for character, act, scene — not needed for premise'),
+  type: z.enum(['premise', 'character', 'act', 'node']),
+  actId: z.string().optional().describe('Required if updating a node'),
+  id: z.string().optional().describe('Required for character, node — not needed for premise'),
   changes: z.record(z.string(), z.unknown()).describe('Fields to merge/update'),
   regenerateImage: z.boolean().optional().describe('Set true if imagePrompt changed and portrait should be regenerated'),
 });
@@ -114,20 +142,26 @@ export function createPlanningTools(session: PlanSession) {
       description: 'Propose a character for the story. Generates their portrait image. The character id MUST exactly match the asset key used in scenes.',
       inputSchema: proposeCharacterInput,
       execute: async (input) => {
-        const artStyle = draft.premise?.artStyle ?? '';
-        const latestRef = draft.referenceImages.at(-1);
-        const refOpts = latestRef ? dataUrlToBase64(latestRef.url) : undefined;
-        const img = await generateCharacterImage(`${artStyle}. ${input.imagePrompt}`, {
-          ...(refOpts ? { referenceImageB64: refOpts.base64, referenceImageMimeType: refOpts.mimeType } : {}),
-        });
-        const dir = assetDir(packageId);
-        await fs.mkdir(dir, { recursive: true });
-        await fs.writeFile(path.join(dir, `${input.id}.png`), Buffer.from(img.base64, 'base64'));
+        let imageUrl = `/generated/${packageId}/${input.id}.png`;
+        let imageMimeType = 'image/png';
+
+        if (!session.bypassAssets) {
+          const artStyle = draft.premise?.artStyle ?? '';
+          const latestRef = draft.referenceImages.at(-1);
+          const refOpts = latestRef ? dataUrlToBase64(latestRef.url) : undefined;
+          const img = await generateCharacterImage(`${artStyle}. ${input.imagePrompt}`, {
+            ...(refOpts ? { referenceImageB64: refOpts.base64, referenceImageMimeType: refOpts.mimeType } : {}),
+          });
+          const dir = assetDir(packageId);
+          await fs.mkdir(dir, { recursive: true });
+          await fs.writeFile(path.join(dir, `${input.id}.png`), Buffer.from(img.base64, 'base64'));
+          imageMimeType = img.mimeType;
+        }
 
         const character: PlanDraftCharacter = {
           ...input,
-          imageUrl: `/generated/${packageId}/${input.id}.png`,
-          imageMimeType: img.mimeType,
+          imageUrl,
+          imageMimeType,
         };
 
         const idx = draft.characters.findIndex(c => c.id === input.id);
@@ -141,69 +175,115 @@ export function createPlanningTools(session: PlanSession) {
       },
     }),
 
-    proposeAct: tool({
-      description: 'Propose a story act. Acts contain scenes and define major narrative chapters.',
-      inputSchema: proposeActInput,
+    draftActOutline: tool({
+      description: 'Step 1 of Act generation. Propose the overarching Act objective and register empty placeholder Nodes.',
+      inputSchema: draftActOutlineInput,
       execute: async (input) => {
-        const idx = draft.acts.findIndex(a => a.id === input.id);
-        if (idx >= 0) {
-          draft.acts[idx] = input;
+        const actIndex = draft.acts.findIndex(a => a.id === input.id);
+        const act = {
+          id: input.id,
+          title: input.title,
+          objective: input.objective,
+          nodes: input.intendedNodes.map(nodeId => ({
+            id: nodeId,
+            title: '',
+            location: '',
+            requiredCharacters: [],
+            beats: [],
+            exitConditions: [],
+            mood: '',
+          }))
+        };
+
+        if (actIndex >= 0) {
+          draft.acts[actIndex] = act;
         } else {
-          draft.acts.push(input);
+          draft.acts.push(act);
         }
         return { ok: true, id: input.id, title: input.title };
       },
     }),
 
-    proposeScene: tool({
-      description: 'Propose a scene within an act. Generates background image and ambient music. location must match scene id.',
-      inputSchema: proposeSceneInput,
+    draftNodeWeb: tool({
+      description: 'Step 2 of Act generation. Wire the placeholder Nodes together into a graph using exitConditions. MUST include fail-forward consequence nodes.',
+      inputSchema: draftNodeWebInput,
       execute: async (input) => {
-        const artStyle = draft.premise?.artStyle ?? '';
-        const dir = assetDir(packageId);
-        await fs.mkdir(dir, { recursive: true });
+        const act = draft.acts.find(a => a.id === input.actId);
+        if (!act) return { ok: false, error: `Act ${input.actId} not found.` };
 
-        const latestRef = draft.referenceImages.at(-1);
-        const refOpts = latestRef ? dataUrlToBase64(latestRef.url) : undefined;
-        const [img, mus] = await Promise.all([
-          generateSceneImage(`${artStyle}. ${input.backgroundPrompt}`, {
-            ...(refOpts ? { referenceImageB64: refOpts.base64, referenceImageMimeType: refOpts.mimeType } : {}),
-          }),
-          generateAmbientMusic(input.musicPrompts),
-        ]);
-
-        await Promise.all([
-          fs.writeFile(path.join(dir, `${input.location}.png`), Buffer.from(img.base64, 'base64')),
-          fs.writeFile(path.join(dir, `${input.mood}.wav`), pcmToWav(mus.pcmBuffer)),
-        ]);
-
-        const scene: PlanDraftScene = {
-          id: input.id,
-          actId: input.actId,
-          title: input.title,
-          location: input.location,
-          requiredCharacters: input.requiredCharacters,
-          beats: input.beats,
-          exitConditions: input.exitConditions,
-          mood: input.mood,
-          backgroundUrl: `/generated/${packageId}/${input.location}.png`,
-          backgroundMimeType: img.mimeType,
-          musicUrl: `/generated/${packageId}/${input.mood}.wav`,
-        };
-
-        const idx = draft.scenes.findIndex(s => s.id === input.id);
-        if (idx >= 0) {
-          draft.scenes[idx] = scene;
-        } else {
-          draft.scenes.push(scene);
+        for (const outline of input.nodes) {
+          const nodeIndex = act.nodes.findIndex(n => n.id === outline.id);
+          if (nodeIndex >= 0) {
+            act.nodes[nodeIndex] = { ...act.nodes[nodeIndex], ...outline, beats: act.nodes[nodeIndex].beats || [] };
+          } else {
+            act.nodes.push({ ...outline, beats: [] });
+          }
         }
+        return { ok: true, updatedNodes: input.nodes.length };
+      },
+    }),
+
+    draftNodeBeats: tool({
+      description: 'Step 2 of Node generation. Given a drafted node outline, flesh out the detailed Beat objects, including pacing rules, hidden findings, and objectives.',
+      inputSchema: draftNodeBeatsInput,
+      execute: async (input) => {
+        const act = draft.acts.find(a => a.id === input.actId);
+        if (!act) return { ok: false, error: `Act ${input.actId} not found.` };
+
+        const node = act.nodes.find(n => n.id === input.nodeId);
+        if (!node) return { ok: false, error: `Node outline ${input.nodeId} not found. Call draftNodeOutline first.` };
+
+        node.beats = input.beats;
+        return { ok: true, updated: input.nodeId, beatCount: input.beats.length };
+      },
+    }),
+
+    finalizeNode: tool({
+      description: 'Step 3 of Node generation. Finalize the node and generate its background image and ambient music. location must match node id.',
+      inputSchema: finalizeNodeInput,
+      execute: async (input) => {
+        const act = draft.acts.find(a => a.id === input.actId);
+        if (!act) return { ok: false, error: `Act ${input.actId} not found.` };
+
+        const node = act.nodes.find(n => n.id === input.nodeId);
+        if (!node) return { ok: false, error: `Node ${input.nodeId} not found.` };
+        if (node.beats.length === 0) return { ok: false, error: `Node ${input.nodeId} has no beats. Call draftNodeBeats first.` };
+
+        let backgroundMimeType = 'image/png';
+        const backgroundUrl = `/generated/${packageId}/${node.location}.png`;
+        const musicUrl = `/generated/${packageId}/${node.mood}.wav`;
+
+        if (!session.bypassAssets) {
+          const artStyle = draft.premise?.artStyle ?? '';
+          const dir = assetDir(packageId);
+          await fs.mkdir(dir, { recursive: true });
+
+          const latestRef = draft.referenceImages.at(-1);
+          const refOpts = latestRef ? dataUrlToBase64(latestRef.url) : undefined;
+          const [img, mus] = await Promise.all([
+            generateSceneImage(`${artStyle}. ${input.backgroundPrompt}`, {
+              ...(refOpts ? { referenceImageB64: refOpts.base64, referenceImageMimeType: refOpts.mimeType } : {}),
+            }),
+            generateAmbientMusic(input.musicPrompts),
+          ]);
+
+          await Promise.all([
+            fs.writeFile(path.join(dir, `${node.location}.png`), Buffer.from(img.base64, 'base64')),
+            fs.writeFile(path.join(dir, `${node.mood}.wav`), pcmToWav(mus.pcmBuffer)),
+          ]);
+          backgroundMimeType = img.mimeType;
+        }
+
+        node.backgroundUrl = backgroundUrl;
+        node.backgroundMimeType = backgroundMimeType;
+        node.musicUrl = musicUrl;
 
         return {
           ok: true,
-          id: input.id,
-          title: input.title,
-          backgroundUrl: scene.backgroundUrl,
-          musicUrl: scene.musicUrl,
+          id: node.id,
+          title: node.title,
+          backgroundUrl: node.backgroundUrl,
+          musicUrl: node.musicUrl,
         };
       },
     }),
@@ -223,12 +303,16 @@ export function createPlanningTools(session: PlanSession) {
           Object.assign(char, input.changes);
 
           if (input.regenerateImage && char.imagePrompt) {
-            const artStyle = draft.premise?.artStyle ?? '';
-            const img = await generateCharacterImage(`${artStyle}. ${char.imagePrompt}`);
-            const dir = assetDir(packageId);
-            await fs.writeFile(path.join(dir, `${input.id}.png`), Buffer.from(img.base64, 'base64'));
             char.imageUrl = `/generated/${packageId}/${input.id}.png`;
-            char.imageMimeType = img.mimeType;
+            char.imageMimeType = 'image/png';
+            if (!session.bypassAssets) {
+              const artStyle = draft.premise?.artStyle ?? '';
+              const img = await generateCharacterImage(`${artStyle}. ${char.imagePrompt}`);
+              const dir = assetDir(packageId);
+              await fs.mkdir(dir, { recursive: true });
+              await fs.writeFile(path.join(dir, `${input.id}.png`), Buffer.from(img.base64, 'base64'));
+              char.imageMimeType = img.mimeType;
+            }
           }
 
           return { ok: true, updated: 'character', id: input.id };
@@ -241,11 +325,13 @@ export function createPlanningTools(session: PlanSession) {
           return { ok: true, updated: 'act', id: input.id };
         }
 
-        if (input.type === 'scene' && input.id) {
-          const scene = draft.scenes.find(s => s.id === input.id);
-          if (!scene) return { ok: false, error: `Scene ${input.id} not found` };
-          Object.assign(scene, input.changes);
-          return { ok: true, updated: 'scene', id: input.id };
+        if (input.type === 'node' && input.id && input.actId) {
+          const act = draft.acts.find(a => a.id === input.actId);
+          if (!act) return { ok: false, error: `Act ${input.actId} not found` };
+          const node = act.nodes.find(n => n.id === input.id);
+          if (!node) return { ok: false, error: `Node ${input.id} not found` };
+          Object.assign(node, input.changes);
+          return { ok: true, updated: 'node', id: input.id };
         }
 
         return { ok: false, error: 'Element not found' };
@@ -255,25 +341,30 @@ export function createPlanningTools(session: PlanSession) {
     finalizePackage: tool({
       description: 'Finalize and assemble the complete VN package. Call only when the user has confirmed the story is ready. This validates, saves, and returns the playable package ID.',
       inputSchema: finalizePackageInput,
-      execute: async (input) => {
+      execute: async () => {
         const { premise } = draft;
         if (!premise) {
           return { ok: false, error: 'No story premise defined. Call proposeStoryPremise first.' };
         }
         if (draft.acts.length === 0) {
-          return { ok: false, error: 'No acts defined. Add at least one act with scenes.' };
+          return { ok: false, error: 'No acts defined. Add at least one act with nodes.' };
         }
 
         const backgrounds: Record<string, { url: string; mimeType: string }> = {};
         const characters: Record<string, { url: string; mimeType: string }> = {};
         const music: Record<string, { url: string; mimeType: string }> = {};
 
-        for (const scene of draft.scenes) {
-          if (scene.backgroundUrl && scene.backgroundMimeType) {
-            backgrounds[scene.location] = { url: scene.backgroundUrl, mimeType: scene.backgroundMimeType };
-          }
-          if (scene.musicUrl) {
-            music[scene.mood] = { url: scene.musicUrl, mimeType: 'audio/wav' };
+        let totalNodes = 0;
+
+        for (const act of draft.acts) {
+          for (const node of act.nodes) {
+            totalNodes++;
+            if (node.backgroundUrl && node.backgroundMimeType) {
+              backgrounds[node.location] = { url: node.backgroundUrl, mimeType: node.backgroundMimeType };
+            }
+            if (node.musicUrl) {
+              music[node.mood] = { url: node.musicUrl, mimeType: 'audio/wav' };
+            }
           }
         }
 
@@ -283,23 +374,22 @@ export function createPlanningTools(session: PlanSession) {
           }
         }
 
-        const acts = draft.acts.map(act => ({
-          id: act.id,
-          title: act.title,
-          scenes: draft.scenes
-            .filter(s => s.actId === act.id)
-            .map(s => ({
-              id: s.id,
-              title: s.title,
-              location: s.location,
-              requiredCharacters: s.requiredCharacters,
-              beats: s.beats,
-              exitConditions: s.exitConditions,
-              mood: s.mood,
-            })),
+        const acts = draft.acts.map(a => ({
+          id: a.id,
+          title: a.title,
+          objective: a.objective,
+          nodes: a.nodes.map(n => ({
+            id: n.id,
+            title: n.title,
+            location: n.location,
+            requiredCharacters: n.requiredCharacters,
+            beats: n.beats,
+            callbacks: n.callbacks,
+            exitConditions: n.exitConditions,
+            mood: n.mood,
+          })),
         }));
 
-        const totalScenes = acts.reduce((sum, a) => sum + a.scenes.length, 0);
         const generationMs = Date.now() - session.createdAt.getTime();
 
         const pkg = {
@@ -320,28 +410,44 @@ export function createPlanningTools(session: PlanSession) {
           plot: {
             premise: premise.premise,
             themes: premise.themes,
+            globalMaterials: premise.globalMaterials,
             acts,
             possibleEndings: premise.possibleEndings,
           },
           assets: { backgrounds, characters, music },
           meta: {
-            totalScenes,
-            estimatedDuration: `${totalScenes * 5}-${totalScenes * 10} minutes`,
+            totalNodes,
+            estimatedDuration: `${totalNodes * 5}-${totalNodes * 10} minutes`,
             generationMs,
           },
         };
 
         VNPackageSchema.parse(pkg);
 
-        db.insert(vnPackages).values({
-          id: pkg.id,
-          createdAt: pkg.createdAt,
-          title: pkg.title,
-          genre: pkg.genre,
-          artStyle: pkg.artStyle,
-          metaJson: JSON.stringify(pkg),
-          assetDir: path.join('public', 'generated', packageId),
-        }).run();
+        // Store the full package as JSON alongside the assets
+        const dir = assetDir(packageId);
+        await fs.mkdir(dir, { recursive: true });
+        await fs.writeFile(path.join(dir, 'story.json'), JSON.stringify(pkg, null, 2));
+
+        const existing = db.select().from(vnPackages).where(eq(vnPackages.id, pkg.id)).get();
+        if (existing) {
+          db.update(vnPackages).set({
+            title: pkg.title,
+            genre: pkg.genre,
+            artStyle: pkg.artStyle,
+            metaJson: JSON.stringify(pkg),
+          }).where(eq(vnPackages.id, pkg.id)).run();
+        } else {
+          db.insert(vnPackages).values({
+            id: pkg.id,
+            createdAt: pkg.createdAt,
+            title: pkg.title,
+            genre: pkg.genre,
+            artStyle: pkg.artStyle,
+            metaJson: JSON.stringify(pkg),
+            assetDir: path.join('public', 'generated', packageId),
+          }).run();
+        }
 
         vnPackageStore.set(pkg.id, pkg);
         console.log('\n' + renderStoryTree(pkg) + '\n');
@@ -350,7 +456,7 @@ export function createPlanningTools(session: PlanSession) {
           ok: true,
           packageId: pkg.id,
           title: pkg.title,
-          totalScenes,
+          totalNodes,
         };
       },
     }),
@@ -361,8 +467,10 @@ export function createPlanningTools(session: PlanSession) {
 export const planningToolSchemas = {
   proposeStoryPremise: proposeStoryPremiseInput,
   proposeCharacter: proposeCharacterInput,
-  proposeAct: proposeActInput,
-  proposeScene: proposeSceneInput,
+  draftActOutline: draftActOutlineInput,
+  draftNodeWeb: draftNodeWebInput,
+  draftNodeBeats: draftNodeBeatsInput,
+  finalizeNode: finalizeNodeInput,
   updateElement: updateElementInput,
   finalizePackage: finalizePackageInput,
 };

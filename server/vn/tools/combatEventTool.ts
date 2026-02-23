@@ -34,7 +34,7 @@ const combatEventParams = z.object({
 
 export const combatEventTool = tool({
   description: 'Inject an event into an active tactical combat. Use when player sends free text during combat and you want to react: modify HP, add/remove tokens, change terrain, or add a narrative log entry. Only call during active combat (when the latest player message starts with [combat-freetext]).',
-  parameters: combatEventParams,
+  inputSchema: combatEventParams,
   execute: async (args: z.infer<typeof combatEventParams>) => {
     const { sessionId, events } = args;
     const row = db.select().from(combatStates).where(eq(combatStates.sessionId, sessionId)).get();

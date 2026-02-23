@@ -2,3 +2,27 @@ node_modules
 .dist
 dist
 .env
+
+# OS
+.DS_Store
+
+# Databases
+*.db
+*.db-shm
+*.db-wal
+
+# Generated content
+public/generated/
+
+# PDFs
+/*.pdf
+
+# IDE / tool configs
+.agent/
+.agents/
+.cursor/
+.factory/
+.kiro/
+.windsurf/
+.claude/skills/
+skills/

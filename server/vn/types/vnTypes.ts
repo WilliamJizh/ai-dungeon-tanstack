@@ -32,30 +32,50 @@ export const CharacterSchema = z.object({
 });
 
 /**
- * A single scene within an act.
- * Scenes consist of narrative beats; the storyteller works through these
- * and must meet exitConditions to advance.
+ * A narrative beat within a node. Instructs the DM on pacing, hidden state,
+ * and foreshadowing without revealing the full scene outline prematurely.
  */
-export const SceneDefinitionSchema = z.object({
+export const BeatSchema = z.object({
+  description: z.string().describe('The core narrative action or event of this beat'),
+  pacing: z.string().describe('Instructions for the DM on how long the beat should last (e.g., "5-8 frames of rapid back-and-forth dialogue")'),
+  findings: z.array(z.string()).optional().describe('Specific clues uncovered during this exact beat'),
+  interactables: z.array(z.string()).optional().describe('Items relevant or discoverable in this exact beat'),
+  foreshadowing: z.string().optional().describe('Subtle hints to lay the groundwork for future beats, allowing the DM to build tension'),
+  objective: z.string().optional().describe('The specific goal the player must accomplish to successfully complete this beat'),
+  nextBeatIfFailed: z.string().optional().describe('Allows dynamic early exits or branching within a node if the player fails the objective or rolls a Miss'),
+});
+
+/**
+ * A branching Node in the Directed Acyclic Graph (DAG) story structure.
+ */
+export const NodeDefinitionSchema = z.object({
   id: z.string(),
   title: z.string(),
-  /** Key into AssetPack.backgrounds for this scene's primary location. */
+  /** Key into AssetPack.backgrounds for this node's primary location. */
   location: z.string(),
-  /** Character IDs that appear in this scene. */
+  /** Character IDs that appear in this node. */
   requiredCharacters: z.array(z.string()),
   /** Ordered narrative beats guiding the storyteller agent. */
-  beats: z.array(z.string()),
-  /** Conditions that must be met before the scene can end (at least one). */
-  exitConditions: z.array(z.string()).min(1),
-  /** Key into AssetPack.music for this scene's ambient track. */
+  beats: z.array(BeatSchema),
+  /** Instructions for the DM to re-use globalMaterials or reference past emotional states. */
+  callbacks: z.array(z.string()).optional(),
+  /** Conditions that dictate which node to transition to next. */
+  exitConditions: z.array(z.object({
+    condition: z.string().describe('Player action or state required to take this exit'),
+    nextNodeId: z.string().optional().describe('The ID of the next Node to transition to. If omitted, the game ends.'),
+  })).min(1),
+  /** Key into AssetPack.music for this node's ambient track. */
   mood: z.string(),
 });
 
-/** A story act containing one or more scenes. */
+/**
+ * An overarching phase of the story containing a web of nodes.
+ */
 export const ActSchema = z.object({
   id: z.string(),
   title: z.string(),
-  scenes: z.array(SceneDefinitionSchema),
+  objective: z.string().describe('The core objective the player is trying to achieve in this Act'),
+  nodes: z.array(NodeDefinitionSchema).min(1),
 });
 
 /**
@@ -79,14 +99,16 @@ export const VNPackageSchema = z.object({
   plot: z.object({
     premise: z.string(),
     themes: z.array(z.string()),
-    /** Story acts in order. Must have at least one. */
+    /** Reusable narrative anchors (NPC encounters, traits, motifs, objects). */
+    globalMaterials: z.array(z.string()).optional(),
+    /** Acts containing a Directed Acyclic Graph of narrative nodes. Must have at least one Act. */
     acts: z.array(ActSchema).min(1),
     /** Possible endings the story can reach based on player choices. */
     possibleEndings: z.array(z.string()).min(1),
   }),
   assets: AssetPackSchema,
   meta: z.object({
-    totalScenes: z.number(),
+    totalNodes: z.number(),
     estimatedDuration: z.string(),
     generationMs: z.number(),
   }),
@@ -95,7 +117,8 @@ export const VNPackageSchema = z.object({
 export type AssetRef = z.infer<typeof AssetRefSchema>;
 export type AssetPack = z.infer<typeof AssetPackSchema>;
 export type Character = z.infer<typeof CharacterSchema>;
-export type SceneDefinition = z.infer<typeof SceneDefinitionSchema>;
+export type Beat = z.infer<typeof BeatSchema>;
+export type NodeDefinition = z.infer<typeof NodeDefinitionSchema>;
 export type Act = z.infer<typeof ActSchema>;
 export type VNPackage = z.infer<typeof VNPackageSchema>;
 
@@ -109,10 +132,10 @@ export interface PlotState {
   sessionId: string;
   packageId: string;
   currentActId: string;
-  currentSceneId: string;
+  currentNodeId: string;
   currentBeat: number;
   offPathTurns: number;
-  completedScenes: string[];
+  completedNodes: string[];
   flags: Record<string, unknown>;
   updatedAt: string;
 }

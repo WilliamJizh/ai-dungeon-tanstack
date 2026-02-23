@@ -9,8 +9,8 @@ import { z } from 'zod';
 export const yieldToPlayerTool = tool({
   description: 'Signal end of your turn. Call after building all frames for this turn, when waiting for player input. This ends the agent loop.',
   inputSchema: z.object({
-    waitingFor: z.enum(['choice', 'free-text', 'continue', 'combat-result'])
-      .describe("'choice' = player must pick from choice frame options, 'free-text' = player types a custom action, 'continue' = player just advances, 'combat-result' = client runs tactical combat and reports outcome"),
+    waitingFor: z.enum(['choice', 'free-text', 'continue', 'combat-result', 'dice-result'])
+      .describe("'choice' = player must pick from choice frame options, 'free-text' = player types a custom action, 'continue' = player just advances, 'combat-result' = client runs tactical combat and reports outcome, 'dice-result' = client plays dice physics animation and reports the rolled value"),
   }),
   execute: async () => ({}), // empty result stored in history — prevents MissingToolResultsError on next turn
 });

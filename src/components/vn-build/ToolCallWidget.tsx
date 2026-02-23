@@ -13,11 +13,12 @@ interface ToolCallWidgetProps {
 const TOOL_LABELS: Record<string, string> = {
   'tool-proposeStoryPremise': '⚙ Story Premise',
   'tool-proposeCharacter': '⚙ Character',
-  'tool-proposeAct': '⚙ Act',
-  'tool-proposeScene': '⚙ Scene',
+  'tool-draftNodeOutline': '⚙ Node Outline',
+  'tool-draftNodeBeats': '⚙ Node Beats',
+  'tool-finalizeNode': '⚙ Finalize Node',
   'tool-updateElement': '⚙ Update',
   'tool-finalizePackage': '⚙ Finalize Package',
-  'tool-google_search': '🔍 Search',
+  'dynamic-tool': '🔍 Search',
 };
 
 const subtle = 'rgba(255,255,255,.18)';
@@ -28,13 +29,13 @@ const blue = 'rgba(140,210,255,.7)';
 function StateChip({ state }: { state: string }) {
   const color =
     state === 'output-available' ? 'rgba(80,220,120,.8)' :
-    state === 'input-available' ? gold :
-    subtle;
+      state === 'input-available' ? gold :
+        subtle;
   const label =
     state === 'output-available' ? '✓ done' :
-    state === 'input-available' ? '◌ executing…' :
-    state === 'input-streaming' ? '░ streaming…' :
-    state;
+      state === 'input-available' ? '◌ executing…' :
+        state === 'input-streaming' ? '░ streaming…' :
+          state;
   return (
     <span style={{ fontSize: 11, color, letterSpacing: '.08em', fontFamily: FONT_MAIN }}>
       {label}
@@ -78,40 +79,6 @@ function ProposeCharacterWidget({ part }: { part: Part }) {
   );
 }
 
-function ProposeSceneWidget({ part }: { part: Part }) {
-  if (!isToolUIPart(part)) return null;
-  if (!part.input) return null;
-  const input = part.input as { id: string; title: string; actId: string; beats: string[]; mood: string };
-  const output = part.state === 'output-available'
-    ? (part.output as { backgroundUrl?: string }) : null;
-
-  return (
-    <div style={{ marginTop: 6 }}>
-      <div style={{ color: subtle, fontSize: 13, marginBottom: 4 }}>
-        <span style={{ color: gold }}>{input.title}</span>
-        {' '}&nbsp;·&nbsp;{' '}
-        <span style={{ color: blue }}>act: {input.actId}</span>
-        {' '}&nbsp;·&nbsp;{' '}
-        <span style={{ opacity: .6 }}>♪ {input.mood}</span>
-      </div>
-      {input.beats?.length > 0 && (
-        <ul style={{ margin: '4px 0 4px 14px', padding: 0, fontSize: 13, color: 'rgba(255,255,255,.55)' }}>
-          {input.beats.map((b, i) => <li key={i}>{b}</li>)}
-        </ul>
-      )}
-      {output?.backgroundUrl ? (
-        <img
-          src={output.backgroundUrl}
-          alt={input.title}
-          style={{ display: 'block', width: '100%', maxHeight: 80, marginTop: 8, borderRadius: 3, border: `1px solid ${subtle}`, objectFit: 'cover' }}
-        />
-      ) : part.state === 'input-available' ? (
-        <div style={{ marginTop: 6, fontSize: 13, color: subtle }}>Generating background + music…</div>
-      ) : null}
-    </div>
-  );
-}
-
 function ProposeStoryPremiseWidget({ part }: { part: Part }) {
   if (!isToolUIPart(part)) return null;
   if (!part.input) return null;
@@ -133,6 +100,40 @@ function ProposeStoryPremiseWidget({ part }: { part: Part }) {
       )}
     </div>
   );
+}
+
+function NodeToolWidget({ part }: { part: Part }) {
+  if (!isToolUIPart(part)) return null;
+  const toolCall = { toolName: part.type, args: part.input as any };
+
+  switch (toolCall.toolName) {
+    case 'tool-draftNodeOutline':
+      return (
+        <>
+          <div style={{ fontSize: 14, color: '#fff', marginBottom: 2 }}>Drafting Node Outline: {toolCall.args.title}</div>
+          <div style={{ fontSize: 12, color: 'rgba(255,255,255,.5)' }}>ID: {toolCall.args.id}</div>
+        </>
+      );
+    case 'tool-draftNodeBeats':
+      return (
+        <>
+          <div style={{ fontSize: 14, color: '#fff', marginBottom: 2 }}>Drafting Beats for Node: {toolCall.args.nodeId}</div>
+          <div style={{ fontSize: 12, color: 'rgba(255,255,255,.5)' }}>Beats: {toolCall.args.beats.length}</div>
+        </>
+      );
+    case 'tool-finalizeNode':
+      return (
+        <>
+          <div style={{ fontSize: 14, color: '#fff', marginBottom: 2 }}>Finalizing Node: {toolCall.args.nodeId}</div>
+          <div style={{ fontSize: 12, color: 'rgba(255,255,255,.5)' }}>Generating assets...</div>
+          {toolCall.toolName === 'tool-finalizeNode' && (
+            <div>Generates Image & Audio</div>
+          )}
+        </>
+      );
+    default:
+      return null;
+  }
 }
 
 function FinalizePackageWidget({ part }: { part: Part }) {
@@ -190,7 +191,7 @@ export function ToolCallWidget({ part }: ToolCallWidgetProps) {
   if (!isToolUIPart(part)) return null;
 
   // Skip google_search display — handled transparently by model
-  if (part.type === 'tool-google_search') return null;
+  if (part.type === 'dynamic-tool') return null;
 
   const label = TOOL_LABELS[part.type] ?? `⚙ ${part.type.replace('tool-', '')}`;
 
@@ -212,14 +213,7 @@ export function ToolCallWidget({ part }: ToolCallWidgetProps) {
 
       {part.type === 'tool-proposeStoryPremise' && <ProposeStoryPremiseWidget part={part} />}
       {part.type === 'tool-proposeCharacter' && <ProposeCharacterWidget part={part} />}
-      {part.type === 'tool-proposeScene' && <ProposeSceneWidget part={part} />}
-      {part.type === 'tool-proposeAct' && isToolUIPart(part) && part.input && (
-        <div style={{ marginTop: 4, fontSize: 13, color: gold }}>
-          {(part.input as { title: string }).title}
-          {' '}&nbsp;·&nbsp;{' '}
-          <span style={{ color: subtle }}>{(part.input as { id: string }).id}</span>
-        </div>
-      )}
+      {(part.type === 'tool-draftNodeOutline' || part.type === 'tool-draftNodeBeats' || part.type === 'tool-finalizeNode') && <NodeToolWidget part={part} />}
       {part.type === 'tool-finalizePackage' && <FinalizePackageWidget part={part} />}
       {part.type === 'tool-updateElement' && <GenericToolWidget part={part} />}
     </div>

@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { db } from '../../db/index.js';
 import { plotStates, vnPackages } from '../../db/schema.js';
 import { eq } from 'drizzle-orm';
-import type { PlayerStats, Item } from '../types/playerTypes.js';
+import type { PlayerStats } from '../types/playerTypes.js';
 import { defaultPlayerStats } from '../types/playerTypes.js';
 
 function getStats(sessionId: string): PlayerStats {
@@ -12,7 +12,7 @@ function getStats(sessionId: string): PlayerStats {
   try {
     const parsed = JSON.parse((row as any).playerStatsJson || '{}');
     if (parsed && parsed.name) return parsed as PlayerStats;
-  } catch {}
+  } catch { }
   // Initialize from package if available
   try {
     if (row.packageId) {
@@ -23,7 +23,7 @@ function getStats(sessionId: string): PlayerStats {
         return defaultPlayerStats(protagonist?.name ?? 'Player');
       }
     }
-  } catch {}
+  } catch { }
   return defaultPlayerStats('Player');
 }
 
@@ -36,7 +36,7 @@ function saveStats(sessionId: string, stats: PlayerStats) {
 
 export const playerStatsTool = tool({
   description: 'Read or update the player character stats (HP, attributes, skills, items, status effects). Call with action="read" at the start of any turn involving player stats. Call with action="update" to modify HP, add skills, apply status effects.',
-  parameters: z.object({
+  inputSchema: z.object({
     action: z.enum(['read', 'update', 'addItem', 'removeItem']),
     sessionId: z.string(),
     updates: z.object({

@@ -5,16 +5,15 @@ interface VNState {
   isHydrated: boolean;
   sessionId: string;
   vnPackage: VNPackage | null;
-  currentActId: string | null;
-  currentSceneId: string | null;
-  completedScenes: string[];
+  currentNodeId: string | null;
+  completedNodes: string[];
 }
 
 type VNAction =
   | { type: 'SET_PACKAGE'; payload: VNPackage }
-  | { type: 'SET_SCENE'; payload: { actId: string; sceneId: string } }
-  | { type: 'ADVANCE_SCENE'; payload: string }
-  | { type: 'COMPLETE_SCENE'; payload: string }
+  | { type: 'SET_NODE'; payload: string }
+  | { type: 'ADVANCE_NODE'; payload: string }
+  | { type: 'COMPLETE_NODE'; payload: string }
   | { type: 'RESET' };
 
 const VN_SESSION_KEY = 'vn-session-id';
@@ -22,9 +21,8 @@ const VN_STATE_KEY = 'vn-state-v1';
 
 interface PersistedVNState {
   vnPackage: VNPackage | null;
-  currentActId: string | null;
-  currentSceneId: string | null;
-  completedScenes: string[];
+  currentNodeId: string | null;
+  completedNodes: string[];
 }
 
 function devLog(message: string, data?: unknown) {
@@ -62,37 +60,34 @@ function isLikelyVNPackage(value: unknown): value is VNPackage {
   if (!isObjectRecord(value)) return false;
   if (typeof value.id !== 'string') return false;
   if (!isObjectRecord(value.plot)) return false;
-  if (!Array.isArray(value.plot.acts) || value.plot.acts.length === 0) return false;
+  if (!Array.isArray(value.plot.nodes) || value.plot.nodes.length === 0) return false;
   if (!isObjectRecord(value.assets)) return false;
   return true;
 }
 
-function normalizeScenePointer(
+function normalizeNodePointer(
   pkg: VNPackage,
-  actId: string | null,
-  sceneId: string | null,
-): { actId: string | null; sceneId: string | null } {
-  const firstAct = pkg.plot.acts[0];
-  const firstScene = firstAct?.scenes[0];
+  nodeId: string | null,
+): string | null {
+  const firstNode = pkg.plot.nodes[0];
 
-  if (!firstAct || !firstScene) {
-    return { actId: null, sceneId: null };
+  if (!firstNode) {
+    return null;
   }
 
-  if (!actId || !sceneId) {
-    return { actId: firstAct.id, sceneId: firstScene.id };
+  if (!nodeId) {
+    return firstNode.id;
   }
 
-  const matchAct = pkg.plot.acts.find((act) => act.id === actId);
-  const matchScene = matchAct?.scenes.find((scene) => scene.id === sceneId);
-  if (!matchAct || !matchScene) {
-    return { actId: firstAct.id, sceneId: firstScene.id };
+  const matchNode = pkg.plot.nodes.find((n: any) => n.id === nodeId);
+  if (!matchNode) {
+    return firstNode.id;
   }
 
-  return { actId, sceneId };
+  return nodeId;
 }
 
-function sanitizeCompletedScenes(input: unknown): string[] {
+function sanitizeCompletedNodes(input: unknown): string[] {
   if (!Array.isArray(input)) return [];
   return input.filter((v): v is string => typeof v === 'string');
 }
@@ -104,9 +99,8 @@ function loadInitialState(): VNState {
     isHydrated: true,
     sessionId,
     vnPackage: null,
-    currentActId: null,
-    currentSceneId: null,
-    completedScenes: [],
+    currentNodeId: null,
+    completedNodes: [],
   };
 
   if (!storage) {
@@ -129,20 +123,18 @@ function loadInitialState(): VNState {
       return baseState;
     }
 
-    const pointer = normalizeScenePointer(pkg, parsed.currentActId, parsed.currentSceneId);
+    const pointer = normalizeNodePointer(pkg, parsed.currentNodeId);
     const hydratedState: VNState = {
       ...baseState,
       vnPackage: pkg,
-      currentActId: pointer.actId,
-      currentSceneId: pointer.sceneId,
-      completedScenes: sanitizeCompletedScenes(parsed.completedScenes),
+      currentNodeId: pointer,
+      completedNodes: sanitizeCompletedNodes(parsed.completedNodes),
     };
 
     devLog('Hydrated VN state', {
       packageId: hydratedState.vnPackage?.id,
-      currentActId: hydratedState.currentActId,
-      currentSceneId: hydratedState.currentSceneId,
-      completedScenes: hydratedState.completedScenes.length,
+      currentNodeId: hydratedState.currentNodeId,
+      completedNodes: hydratedState.completedNodes.length,
     });
     return hydratedState;
   } catch (err) {
@@ -156,44 +148,40 @@ function vnReducer(state: VNState, action: VNAction): VNState {
   switch (action.type) {
     case 'SET_PACKAGE': {
       const pkg = action.payload;
-      const firstAct = pkg.plot.acts[0];
-      const firstScene = firstAct?.scenes[0];
+      const firstNode = pkg.plot.nodes[0];
       return {
         ...state,
         vnPackage: pkg,
-        currentActId: firstAct?.id ?? null,
-        currentSceneId: firstScene?.id ?? null,
-        completedScenes: [],
+        currentNodeId: firstNode?.id ?? null,
+        completedNodes: [],
       };
     }
-    case 'SET_SCENE':
+    case 'SET_NODE':
       return {
         ...state,
-        currentActId: action.payload.actId,
-        currentSceneId: action.payload.sceneId,
+        currentNodeId: action.payload,
       };
-    case 'ADVANCE_SCENE': {
-      const nextSceneId = action.payload;
+    case 'ADVANCE_NODE': {
+      const nextNodeId = action.payload;
       return {
         ...state,
-        currentSceneId: nextSceneId,
-        completedScenes: state.currentSceneId
-          ? [...state.completedScenes, state.currentSceneId]
-          : state.completedScenes,
+        currentNodeId: nextNodeId,
+        completedNodes: state.currentNodeId
+          ? [...state.completedNodes, state.currentNodeId]
+          : state.completedNodes,
       };
     }
-    case 'COMPLETE_SCENE':
+    case 'COMPLETE_NODE':
       return {
         ...state,
-        completedScenes: [...state.completedScenes, action.payload],
+        completedNodes: [...state.completedNodes, action.payload],
       };
     case 'RESET':
       return {
         ...state,
         vnPackage: null,
-        currentActId: null,
-        currentSceneId: null,
-        completedScenes: [],
+        currentNodeId: null,
+        completedNodes: [],
       };
     default:
       return state;
@@ -202,9 +190,9 @@ function vnReducer(state: VNState, action: VNAction): VNState {
 
 interface VNContextValue extends VNState {
   setPackage: (pkg: VNPackage) => void;
-  setScene: (actId: string, sceneId: string) => void;
-  advanceScene: (nextSceneId: string) => void;
-  completeScene: (sceneId: string) => void;
+  setNode: (nodeId: string) => void;
+  advanceNode: (nextNodeId: string) => void;
+  completeNode: (nodeId: string) => void;
   reset: () => void;
 }
 
@@ -218,23 +206,22 @@ export function VNProvider({ children }: { children: ReactNode }) {
     if (!storage) return;
     const snapshot: PersistedVNState = {
       vnPackage: state.vnPackage,
-      currentActId: state.currentActId,
-      currentSceneId: state.currentSceneId,
-      completedScenes: state.completedScenes,
+      currentNodeId: state.currentNodeId,
+      completedNodes: state.completedNodes,
     };
     try {
       storage.setItem(VN_STATE_KEY, JSON.stringify(snapshot));
     } catch (err) {
       devLog('Failed to persist VN state snapshot', err);
     }
-  }, [state.vnPackage, state.currentActId, state.currentSceneId, state.completedScenes]);
+  }, [state.vnPackage, state.currentNodeId, state.completedNodes]);
 
   const value: VNContextValue = {
     ...state,
     setPackage: (pkg) => dispatch({ type: 'SET_PACKAGE', payload: pkg }),
-    setScene: (actId, sceneId) => dispatch({ type: 'SET_SCENE', payload: { actId, sceneId } }),
-    advanceScene: (nextSceneId) => dispatch({ type: 'ADVANCE_SCENE', payload: nextSceneId }),
-    completeScene: (sceneId) => dispatch({ type: 'COMPLETE_SCENE', payload: sceneId }),
+    setNode: (nodeId) => dispatch({ type: 'SET_NODE', payload: nodeId }),
+    advanceNode: (nextNodeId) => dispatch({ type: 'ADVANCE_NODE', payload: nextNodeId }),
+    completeNode: (nodeId) => dispatch({ type: 'COMPLETE_NODE', payload: nodeId }),
     reset: () => {
       getStorage()?.removeItem(VN_STATE_KEY);
       dispatch({ type: 'RESET' });

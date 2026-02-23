@@ -34,7 +34,7 @@ const initCombatParams = z.object({
 
 export const initCombatTool = tool({
   description: 'Initialize a tactical combat encounter. Generates a top-down grid map image, sets up tokens (player + enemies + objectives), and returns frame data to pass to frameBuilderTool. Call this when the story calls for a combat encounter.',
-  parameters: initCombatParams,
+  inputSchema: initCombatParams,
   execute: async (args: z.infer<typeof initCombatParams>) => {
     const { sessionId, setting, artStyle, gridCols, gridRows, tokens, terrain } = args;
     // Generate top-down map image

@@ -11,7 +11,7 @@ interface MusicTrack {
   sceneTitle: string;
   actTitle: string;
   musicUrl: string;
-  mood: string;
+  mood?: string;
 }
 
 function TrackRow({ track }: { track: MusicTrack }) {
@@ -91,15 +91,14 @@ function TrackRow({ track }: { track: MusicTrack }) {
 }
 
 export function MusicTab({ draft }: { draft: PlanDraftState }) {
-  const tracks: MusicTrack[] = draft.acts.flatMap(act =>
-    act.scenes
-      .filter(s => s.musicUrl)
-      .map(s => ({
-        sceneId: s.id,
-        sceneTitle: s.title,
-        actTitle: act.title,
-        musicUrl: s.musicUrl!,
-        mood: s.mood,
+  const tracks: MusicTrack[] = draft.nodes.flatMap(node =>
+    node.beats
+      .filter(beat => beat.musicUrl)
+      .map(beat => ({
+        sceneId: beat.id,
+        sceneTitle: beat.title,
+        actTitle: node.title, // Assuming node title acts as the parent title
+        musicUrl: beat.musicUrl!,
       }))
   );
 

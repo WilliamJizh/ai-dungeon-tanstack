@@ -23,12 +23,13 @@ export function StoryPanel({ draft }: StoryPanelProps) {
   const [activeTab, setActiveTab] = useState<Tab>('structure');
 
   const charCount = draft.characters.length;
-  const sceneCount = draft.acts.reduce((sum, a) => sum + a.scenes.length, 0);
-  const musicCount = draft.acts.reduce((sum, a) => sum + a.scenes.filter(s => s.musicUrl).length, 0);
+  const totalNodes = draft.nodes?.length ?? 0;
+  const totalBeats = draft.nodes?.reduce((sum, n) => sum + n.beats.length, 0) ?? 0;
+  const musicCount = draft.nodes?.reduce((sum, n) => sum + n.beats.filter(b => b.musicUrl).length, 0) ?? 0;
 
   const badgeFor = (tab: Tab) => {
     if (tab === 'characters') return charCount > 0 ? charCount : null;
-    if (tab === 'structure') return sceneCount > 0 ? sceneCount : null;
+    if (tab === 'structure') return totalNodes > 0 ? totalNodes : null; // Use totalNodes for structure
     if (tab === 'music') return musicCount > 0 ? musicCount : null;
     return null;
   };
@@ -77,7 +78,22 @@ export function StoryPanel({ draft }: StoryPanelProps) {
               }}
             >
               {tab.label}
-              {badge !== null && (
+              {tab.id === 'structure' && (totalNodes > 0 || totalBeats > 0) && (
+                <span
+                  style={{
+                    padding: '2px 8px',
+                    border: '1px solid rgba(255,255,255,.2)',
+                    borderRadius: 12,
+                    color: 'rgba(255,255,255,.6)',
+                    fontSize: 10,
+                    textTransform: 'uppercase',
+                    letterSpacing: '.12em',
+                  }}
+                >
+                  {totalNodes} NODES / {totalBeats} BEATS
+                </span>
+              )}
+              {tab.id !== 'structure' && badge !== null && (
                 <span
                   style={{
                     fontSize: 10,

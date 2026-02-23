@@ -13,45 +13,44 @@ export const MOCK_PACK: VNPackage = {
   setting: { world: 'Neo-Tokyo', era: '2077', tone: 'noir' },
   characters: [
     { id: 'char_detective', name: 'Detective', role: 'protagonist', description: 'A weary investigator', imagePrompt: '' },
-    { id: 'char_kim',       name: 'Kim',       role: 'ally',        description: 'A sharp-witted partner', imagePrompt: '' },
-    { id: 'char_jax',       name: 'Jax',       role: 'protagonist', description: 'Frontier pilot',        imagePrompt: '' },
-    { id: 'char_echo',      name: 'E.C.H.O.',  role: 'ally',        description: 'AI companion',          imagePrompt: '' },
-    { id: 'char_elara',     name: 'Elara',     role: 'npc',         description: 'Station medic',         imagePrompt: '' },
+    { id: 'char_kim', name: 'Kim', role: 'ally', description: 'A sharp-witted partner', imagePrompt: '' },
+    { id: 'char_jax', name: 'Jax', role: 'protagonist', description: 'Frontier pilot', imagePrompt: '' },
+    { id: 'char_echo', name: 'E.C.H.O.', role: 'ally', description: 'AI companion', imagePrompt: '' },
+    { id: 'char_elara', name: 'Elara', role: 'npc', description: 'Station medic', imagePrompt: '' },
   ],
   plot: {
     premise: 'Preview',
     themes: ['preview'],
-    acts: [{
-      id: 'act_1', title: 'Act I',
-      scenes: [{ id: 'scene_1', title: 'Preview', location: 'bg_city', requiredCharacters: ['char_detective'], beats: ['preview'], exitConditions: ['exit'], mood: 'ambient' }],
+    nodes: [{
+      id: 'preview_node', title: 'Preview Node', location: 'bg_city', requiredCharacters: ['char_detective'], beats: [{ description: 'preview', pacing: 'ambient' }], exitConditions: [{ condition: 'exit' }], mood: 'ambient'
     }],
     possibleEndings: ['preview end'],
   },
   assets: {
     backgrounds: {
-      bg_city:    { url: '/assets/background-city.png',                                                                mimeType: 'image/png' },
-      bg_fight:   { url: '/assets/background-fight.png',                                                               mimeType: 'image/png' },
-      bg_cockpit: { url: '/generated/bee1db66-55c1-43da-8969-de76caee89fd/bg_cockpit.png',                             mimeType: 'image/png' },
-      bg_outpost: { url: '/generated/bee1db66-55c1-43da-8969-de76caee89fd/bg_outpost.png',                             mimeType: 'image/png' },
-      bg_hangar:  { url: '/generated/bee1db66-55c1-43da-8969-de76caee89fd/bg_station_hangar.png',                      mimeType: 'image/png' },
+      bg_city: { url: '/assets/background-city.png', mimeType: 'image/png' },
+      bg_fight: { url: '/assets/background-fight.png', mimeType: 'image/png' },
+      bg_cockpit: { url: '/generated/bee1db66-55c1-43da-8969-de76caee89fd/bg_cockpit.png', mimeType: 'image/png' },
+      bg_outpost: { url: '/generated/bee1db66-55c1-43da-8969-de76caee89fd/bg_outpost.png', mimeType: 'image/png' },
+      bg_hangar: { url: '/generated/bee1db66-55c1-43da-8969-de76caee89fd/bg_station_hangar.png', mimeType: 'image/png' },
     },
     characters: {
-      char_detective: { url: '/assets/character-detective.png',                                                        mimeType: 'image/png' },
-      char_kim:       { url: '/assets/character-kim.png',                                                              mimeType: 'image/png' },
-      char_jax:       { url: '/generated/bee1db66-55c1-43da-8969-de76caee89fd/char_jax_neutral.png',                   mimeType: 'image/png' },
-      char_echo:      { url: '/generated/bee1db66-55c1-43da-8969-de76caee89fd/char_echo_flicker.png',                  mimeType: 'image/png' },
-      char_elara:     { url: '/generated/bee1db66-55c1-43da-8969-de76caee89fd/char_elara_scared.png',                  mimeType: 'image/png' },
-      portrait_detective: { url: '/assets/portrait-detective.png',                                                     mimeType: 'image/png' },
+      char_detective: { url: '/assets/character-detective.png', mimeType: 'image/png' },
+      char_kim: { url: '/assets/character-kim.png', mimeType: 'image/png' },
+      char_jax: { url: '/generated/bee1db66-55c1-43da-8969-de76caee89fd/char_jax_neutral.png', mimeType: 'image/png' },
+      char_echo: { url: '/generated/bee1db66-55c1-43da-8969-de76caee89fd/char_echo_flicker.png', mimeType: 'image/png' },
+      char_elara: { url: '/generated/bee1db66-55c1-43da-8969-de76caee89fd/char_elara_scared.png', mimeType: 'image/png' },
+      portrait_detective: { url: '/assets/portrait-detective.png', mimeType: 'image/png' },
     },
     music: {},
   },
-  meta: { totalScenes: 1, estimatedDuration: '1 min', generationMs: 0 },
+  meta: { totalNodes: 1, estimatedDuration: '1 min', generationMs: 0 },
 };
 
 // ── Frame group types ─────────────────────────────────────────────────────────
 
 export interface PreviewVariant { label: string; frame: VNFrame }
-export interface PreviewGroup   { label: string; variants: PreviewVariant[] }
+export interface PreviewGroup { label: string; variants: PreviewVariant[] }
 
 // ── Shared HUD ────────────────────────────────────────────────────────────────
 
@@ -103,7 +102,7 @@ export const PREVIEW_GROUPS: PreviewGroup[] = [
         frame: {
           id: 'dial-right', type: 'dialogue', hud: HUD,
           panels: [
-            { id: 'left',  backgroundAsset: 'bg_city', characterAsset: 'char_detective', dimmed: true,  panelWeight: 38 },
+            { id: 'left', backgroundAsset: 'bg_city', characterAsset: 'char_detective', dimmed: true, panelWeight: 38 },
             { id: 'right', backgroundAsset: 'bg_city', characterAsset: 'char_kim', characterFlipped: true, dimmed: false, panelWeight: 62 },
           ],
           dialogue: { speaker: 'DETECTIVE KIM', text: '"So, you finally decided to show up. We have a situation at the old docks — and you\'re not going to like what we found."', targetPanel: 'right' },
@@ -114,7 +113,7 @@ export const PREVIEW_GROUPS: PreviewGroup[] = [
         frame: {
           id: 'dial-left', type: 'dialogue', hud: HUD,
           panels: [
-            { id: 'left',  backgroundAsset: 'bg_city', characterAsset: 'char_detective', dimmed: false, panelWeight: 62 },
+            { id: 'left', backgroundAsset: 'bg_city', characterAsset: 'char_detective', dimmed: false, panelWeight: 62 },
             { id: 'right', backgroundAsset: 'bg_city', characterAsset: 'char_kim', characterFlipped: true, dimmed: true, panelWeight: 38 },
           ],
           dialogue: { speaker: 'DETECTIVE', text: '"The evidence is right here. You can\'t deny it — unless you\'re telling me you\'ve never seen this man before in your life."', targetPanel: 'left' },
@@ -125,7 +124,7 @@ export const PREVIEW_GROUPS: PreviewGroup[] = [
         frame: {
           id: 'dial-narr', type: 'dialogue', hud: HUD,
           panels: [
-            { id: 'left',  backgroundAsset: 'bg_city', characterAsset: 'char_detective', dimmed: true,  panelWeight: 38 },
+            { id: 'left', backgroundAsset: 'bg_city', characterAsset: 'char_detective', dimmed: true, panelWeight: 38 },
             { id: 'right', backgroundAsset: 'bg_city', characterAsset: 'char_kim', characterFlipped: true, dimmed: false, panelWeight: 62 },
           ],
           narration: { text: 'The rain hasn\'t stopped in three days. Someone wants us here before the evidence washes away.' },
@@ -136,7 +135,7 @@ export const PREVIEW_GROUPS: PreviewGroup[] = [
         frame: {
           id: 'dial-scifi', type: 'dialogue', hud: HUD2,
           panels: [
-            { id: 'left',  backgroundAsset: 'bg_cockpit', characterAsset: 'char_echo', dimmed: true,  panelWeight: 38 },
+            { id: 'left', backgroundAsset: 'bg_cockpit', characterAsset: 'char_echo', dimmed: true, panelWeight: 38 },
             { id: 'right', backgroundAsset: 'bg_cockpit', characterAsset: 'char_jax', characterFlipped: true, dimmed: false, panelWeight: 62 },
           ],
           dialogue: { speaker: 'JAX', text: '"E.C.H.O., how long until the station comes back online?" "Seventeen minutes. Assuming they haven\'t changed the access codes again."', targetPanel: 'right' },
@@ -154,9 +153,9 @@ export const PREVIEW_GROUPS: PreviewGroup[] = [
         frame: {
           id: 'tp-multi', type: 'three-panel', hud: HUD,
           panels: [
-            { id: 'left',   backgroundAsset: 'bg_city', characterAsset: 'char_detective', dimmed: true },
+            { id: 'left', backgroundAsset: 'bg_city', characterAsset: 'char_detective', dimmed: true },
             { id: 'center', backgroundAsset: 'bg_city' },
-            { id: 'right',  backgroundAsset: 'bg_city', characterAsset: 'char_kim', characterFlipped: true, dimmed: false },
+            { id: 'right', backgroundAsset: 'bg_city', characterAsset: 'char_kim', characterFlipped: true, dimmed: false },
           ],
           narration: { text: 'She slides the photograph across the table without looking up. The fluorescent light flickers once, then holds.' },
           dialogue: { speaker: 'DETECTIVE KIM', text: '"Look at the photo."', targetPanel: 'right' },
@@ -167,9 +166,9 @@ export const PREVIEW_GROUPS: PreviewGroup[] = [
         frame: {
           id: 'tp-narr', type: 'three-panel', hud: HUD,
           panels: [
-            { id: 'left',   backgroundAsset: 'bg_city', characterAsset: 'char_detective', dimmed: true },
+            { id: 'left', backgroundAsset: 'bg_city', characterAsset: 'char_detective', dimmed: true },
             { id: 'center', backgroundAsset: 'bg_city' },
-            { id: 'right',  backgroundAsset: 'bg_city', dimmed: true },
+            { id: 'right', backgroundAsset: 'bg_city', dimmed: true },
           ],
           narration: { text: 'An hour passes. Then another. Outside, the city hums its endless frequency — indifferent as always to whatever happens in rooms like this.' },
         },
@@ -179,9 +178,9 @@ export const PREVIEW_GROUPS: PreviewGroup[] = [
         frame: {
           id: 'tp-scifi', type: 'three-panel', hud: HUD2,
           panels: [
-            { id: 'left',   backgroundAsset: 'bg_hangar', characterAsset: 'char_jax',   dimmed: false },
+            { id: 'left', backgroundAsset: 'bg_hangar', characterAsset: 'char_jax', dimmed: false },
             { id: 'center', backgroundAsset: 'bg_hangar' },
-            { id: 'right',  backgroundAsset: 'bg_hangar', characterAsset: 'char_elara', characterFlipped: true, dimmed: true },
+            { id: 'right', backgroundAsset: 'bg_hangar', characterAsset: 'char_elara', characterFlipped: true, dimmed: true },
           ],
           narration: { text: 'The hangar bay is quiet. Too quiet for a station that should be running at full capacity.' },
           dialogue: { speaker: 'JAX', text: '"Where is everyone?"', targetPanel: 'left' },
@@ -199,7 +198,7 @@ export const PREVIEW_GROUPS: PreviewGroup[] = [
         frame: {
           id: 'choice-full', type: 'choice', hud: HUD,
           panels: [
-            { id: 'left',  backgroundAsset: 'bg_city', characterAsset: 'char_detective', dimmed: true },
+            { id: 'left', backgroundAsset: 'bg_city', characterAsset: 'char_detective', dimmed: true },
             { id: 'right', backgroundAsset: 'bg_city', characterAsset: 'char_kim', characterFlipped: true, dimmed: false },
           ],
           choices: [
@@ -216,7 +215,7 @@ export const PREVIEW_GROUPS: PreviewGroup[] = [
         frame: {
           id: 'choice-only', type: 'choice', hud: HUD,
           panels: [
-            { id: 'left',  backgroundAsset: 'bg_city', characterAsset: 'char_detective', dimmed: true },
+            { id: 'left', backgroundAsset: 'bg_city', characterAsset: 'char_detective', dimmed: true },
             { id: 'right', backgroundAsset: 'bg_city', dimmed: false },
           ],
           choices: [
@@ -232,7 +231,7 @@ export const PREVIEW_GROUPS: PreviewGroup[] = [
         frame: {
           id: 'choice-scifi', type: 'choice', hud: HUD2,
           panels: [
-            { id: 'left',  backgroundAsset: 'bg_outpost', characterAsset: 'char_jax',  dimmed: true },
+            { id: 'left', backgroundAsset: 'bg_outpost', characterAsset: 'char_jax', dimmed: true },
             { id: 'right', backgroundAsset: 'bg_outpost', characterAsset: 'char_echo', characterFlipped: true, dimmed: false },
           ],
           choices: [
@@ -260,7 +259,7 @@ export const PREVIEW_GROUPS: PreviewGroup[] = [
             player: { name: 'DETECTIVE', level: 12, hp: 68, maxHp: 100, portraitAsset: 'portrait_detective' },
             enemies: [
               { name: 'ENFORCER', hp: 74, maxHp: 100 },
-              { name: 'FIXER',    hp: 51, maxHp: 80  },
+              { name: 'FIXER', hp: 51, maxHp: 80 },
             ],
             combatLog: [
               'ROUND 1 — COMBAT BEGINS',
@@ -269,10 +268,10 @@ export const PREVIEW_GROUPS: PreviewGroup[] = [
               'Your move.',
             ],
             skills: [
-              { icon: '⚔', label: 'STRIKE',     active: true  },
-              { icon: '⊙', label: 'ANALYSE',    active: false },
+              { icon: '⚔', label: 'STRIKE', active: true },
+              { icon: '⊙', label: 'ANALYSE', active: false },
               { icon: '◆', label: 'INTIMIDATE', active: false },
-              { icon: '▷', label: 'FLEE',       active: false },
+              { icon: '▷', label: 'FLEE', active: false },
             ],
             round: 1,
           },
@@ -295,10 +294,10 @@ export const PREVIEW_GROUPS: PreviewGroup[] = [
               'Low HP — fight or flee.',
             ],
             skills: [
-              { icon: '⚔', label: 'STRIKE',     active: false },
-              { icon: '⊙', label: 'ANALYSE',    active: false },
+              { icon: '⚔', label: 'STRIKE', active: false },
+              { icon: '⊙', label: 'ANALYSE', active: false },
               { icon: '◆', label: 'INTIMIDATE', active: false },
-              { icon: '▷', label: 'FLEE',       active: true  },
+              { icon: '▷', label: 'FLEE', active: true },
             ],
             round: 5,
           },

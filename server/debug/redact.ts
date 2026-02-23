@@ -7,7 +7,7 @@ const REDACT_PATTERNS = [
   /cookie/i,
 ];
 
-const MAX_STRING_LENGTH = 8000;
+const MAX_STRING_LENGTH = 100_000;
 const MAX_ARRAY_LENGTH = 200;
 const MAX_OBJECT_KEYS = 200;
 const MAX_DEPTH = 8;

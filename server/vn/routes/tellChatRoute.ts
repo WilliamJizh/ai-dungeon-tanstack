@@ -5,7 +5,8 @@ import { plotStates, vnPackages } from '../../db/schema.js';
 import { eq } from 'drizzle-orm';
 import { createStorytellerAgent } from '../agents/storytellerChatAgent.js';
 import { vnPackageStore } from '../state/vnPackageStore.js';
-import { createTellChatTrace } from '../../debug/traceTellChat.js';
+import { startLLMTrace, MODEL_IDS } from '../../lib/modelFactory.js';
+import { compressContext, summarizeNodeInBackground } from '../utils/contextCompressor.js';
 import type { VNPackage } from '../types/vnTypes.js';
 
 async function loadVNPackage(packageId: string): Promise<VNPackage | null> {
@@ -27,20 +28,26 @@ function initPlotStateIfNeeded(sessionId: string, packageId: string, vnPackage: 
     .get();
   if (existing) return;
 
-  const firstAct = vnPackage.plot.acts[0];
-  const firstScene = firstAct?.scenes[0];
-  if (!firstAct || !firstScene) return;
+  if (!vnPackage.plot.acts || vnPackage.plot.acts.length === 0 || vnPackage.plot.acts[0].nodes.length === 0) {
+    // Original instruction had `return c.json(...)`, adapting to current function context
+    // This function is void, so just return.
+    return;
+  }
 
+  const firstNode = vnPackage.plot.acts[0].nodes[0];
+
+  // Initialize fresh playback state
   db.insert(plotStates).values({
     sessionId,
-    packageId,
-    currentActId: firstAct.id,
-    currentSceneId: firstScene.id,
+    packageId: packageId,
+    currentNodeId: firstNode.id,
+    currentActId: vnPackage.plot.acts[0].id,
     currentBeat: 0,
     offPathTurns: 0,
-    completedScenes: '[]',
-    flagsJson: '{}',
-    updatedAt: new Date().toISOString(),
+    completedNodes: '[]',
+    playerStatsJson: '{}', // starting inventory/skills
+    flagsJson: '{}',       // starting flags
+    updatedAt: new Date().toISOString()
   }).run();
 }
 
@@ -74,17 +81,26 @@ export async function tellChatRoute(app: FastifyInstance) {
 
     initPlotStateIfNeeded(sessionId, packageId, vnPackage);
 
+    // Get the current node ID and story summary before the AI acts
+    const preTurnState = db.select({ currentNodeId: plotStates.currentNodeId, storySummary: plotStates.storySummary }).from(plotStates).where(eq(plotStates.sessionId, sessionId)).get();
+
+    // Compress the context array before giving it to the LLM
+    // (summarize-then-cut if messages exceed HIGH_WATER threshold)
+    const compressedMessages = await compressContext(uiMessages as any[], sessionId, preTurnState?.storySummary || '');
+
     const agent = createStorytellerAgent(vnPackage, sessionId);
-    const { traceId, onStepFinish, finishTrace } = createTellChatTrace({
-      sessionId,
-      requestId: req.id,
-    });
+    const { traceId, onStepFinish, finishTrace } = startLLMTrace({
+      sessionId, requestId: req.id,
+      pipeline: 'vn-tell-chat', agentId: 'storyteller-chat-agent',
+      modelProvider: 'google', modelId: MODEL_IDS.storyteller,
+      tags: ['agent', 'storyteller'], source: 'tellChatRoute',
+    }, { pipeline: 'vn-tell-chat', sessionId });
 
     req.log.info({ traceId }, '[VN tell/chat] trace started');
 
     let response: Response;
     try {
-      response = await createAgentUIStreamResponse({ agent, uiMessages, onStepFinish });
+      response = await createAgentUIStreamResponse({ agent, uiMessages: compressedMessages, onStepFinish });
     } catch (err) {
       finishTrace('error', err);
       req.log.error({ err }, '[VN tell/chat] agent init error');
@@ -111,7 +127,19 @@ export async function tellChatRoute(app: FastifyInstance) {
       }
     };
     pump()
-      .then(() => finishTrace('success'))
+      .then(() => {
+        finishTrace('success');
+
+        // After the stream finishes, check if the node changed during this turn
+        if (preTurnState) {
+          const postTurnState = db.select({ currentNodeId: plotStates.currentNodeId }).from(plotStates).where(eq(plotStates.sessionId, sessionId)).get();
+          if (postTurnState && postTurnState.currentNodeId !== preTurnState.currentNodeId) {
+            req.log.info({ sessionId, from: preTurnState.currentNodeId, to: postTurnState.currentNodeId }, '[VN tell/chat] Node transitioned. Kicking off background summarizer.');
+            // Fire and forget the summariser
+            summarizeNodeInBackground(sessionId, uiMessages as any[], preTurnState.storySummary);
+          }
+        }
+      })
       .catch((err) => {
         req.log.error({ err }, '[VN tell/chat] stream error');
         finishTrace('error', err);

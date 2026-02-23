@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sprite Sheet Demo</title>
+  <script src="https://cdn.jsdelivr.net/npm/pixi.js@8.5.2/dist/pixi.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #07070f; overflow: hidden; font-family: 'Courier New', monospace; }
+    #canvas-wrap { position: fixed; inset: 0; }
+
+    #controls {
+      position: fixed;
+      bottom: 28px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 10px;
+      z-index: 20;
+    }
+
+    .ctrl-btn {
+      padding: 10px 24px;
+      background: rgba(10, 8, 28, 0.88);
+      border: 1px solid rgba(100, 80, 200, 0.45);
+      color: rgba(180, 160, 255, 0.9);
+      font-family: inherit;
+      font-size: 12px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      cursor: pointer;
+      border-radius: 3px;
+      transition: all 0.12s;
+    }
+    .ctrl-btn:hover { background: rgba(50, 30, 100, 0.92); border-color: rgba(160, 130, 255, 0.7); color: #fff; }
+    .ctrl-btn.active { background: rgba(80, 40, 160, 0.95); border-color: #9060ff; color: #fff; box-shadow: 0 0 12px rgba(120,60,255,0.4); }
+
+    #fps-label {
+      position: fixed;
+      bottom: 32px;
+      right: 196px;
+      color: rgba(120,100,180,0.6);
+      font-size: 11px;
+      font-family: 'Courier New', monospace;
+      pointer-events: none;
+    }
+
+    #info {
+      position: fixed;
+      top: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: rgba(120, 100, 180, 0.7);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      pointer-events: none;
+    }
+
+    /* Sprite sheet debug viewer */
+    #sheet-preview {
+      position: fixed;
+      bottom: 80px;
+      right: 16px;
+      width: 160px;
+      height: 160px;
+      border: 1px solid rgba(100,80,200,0.3);
+      opacity: 0.6;
+      image-rendering: pixelated;
+    }
+  </style>
+</head>
+<body>
+
+<div id="canvas-wrap"></div>
+<div id="info">loading sprite sheet…</div>
+
+<div id="fps-label">fps: 6</div>
+<div id="controls">
+  <button class="ctrl-btn" id="btn-slower">− slower</button>
+  <button class="ctrl-btn active" id="btn-play">⏸ pause</button>
+  <button class="ctrl-btn" id="btn-faster">+ faster</button>
+</div>
+
+<img id="sheet-preview" src="/assets/sprite-demo/sprite-sheet.png" title="sprite sheet">
+
+<script type="module">
+
+const SHEET_URL = '/assets/sprite-demo/sprite-sheet.png'
+
+// 4×4 grid = 16 frames, all one idle loop
+const COLS = 4
+const ROWS = 4
+const IDLE_FPS = 6  // breathing cycle ~2.7s at 6fps
+
+// ── PixiJS init ──────────────────────────────────────────────────────────────
+const app = new PIXI.Application()
+await app.init({
+  resizeTo: window,
+  backgroundColor: 0x07070f,
+  antialias: false,  // pixel-crisp for sprites
+  resolution: window.devicePixelRatio || 1,
+  autoDensity: true,
+})
+document.getElementById('canvas-wrap').appendChild(app.canvas)
+
+let W = app.screen.width
+let H = app.screen.height
+
+const infoEl = document.getElementById('info')
+
+// ── Load sprite sheet texture ─────────────────────────────────────────────────
+infoEl.textContent = 'loading sprite sheet…'
+let sheetTexture
+try {
+  sheetTexture = await PIXI.Assets.load(SHEET_URL)
+} catch (e) {
+  infoEl.textContent = '✗ sprite-sheet.png not found — run: npx tsx scripts/generate-sprite-sheet.ts'
+  console.error(e)
+  throw e
+}
+
+const sheetW = sheetTexture.width
+const sheetH = sheetTexture.height
+const frameW = Math.floor(sheetW / COLS)
+const frameH = Math.floor(sheetH / ROWS)
+
+infoEl.textContent = `sheet: ${sheetW}×${sheetH}  |  frame: ${frameW}×${frameH}  |  16 frames`
+
+// ── Build frame textures by slicing the sheet ─────────────────────────────────
+const frames = []
+for (let row = 0; row < ROWS; row++) {
+  for (let col = 0; col < COLS; col++) {
+    const rect = new PIXI.Rectangle(col * frameW, row * frameH, frameW, frameH)
+    frames.push(new PIXI.Texture({ source: sheetTexture.source, frame: rect }))
+  }
+}
+
+// ── Animated sprite ───────────────────────────────────────────────────────────
+const sprite = new PIXI.AnimatedSprite(frames)
+
+// Scale to fit ~65% of screen height while maintaining aspect ratio
+const targetH = H * 0.65
+const scale = targetH / frameH
+sprite.scale.set(scale)
+sprite.anchor.set(0.5, 1.0)  // bottom-centre anchor
+sprite.x = W / 2
+sprite.y = H * 0.88
+
+let fps = IDLE_FPS
+sprite.animationSpeed = fps / 60
+sprite.loop = true
+sprite.gotoAndPlay(0)
+
+app.stage.addChild(sprite)
+
+// ── Controls ──────────────────────────────────────────────────────────────────
+let paused = false
+
+function updateFpsLabel() {
+  document.getElementById('fps-label').textContent = `fps: ${fps}`
+}
+
+document.getElementById('btn-play').addEventListener('click', () => {
+  paused = !paused
+  paused ? sprite.stop() : sprite.play()
+  document.getElementById('btn-play').textContent = paused ? '▶ play' : '⏸ pause'
+})
+
+document.getElementById('btn-slower').addEventListener('click', () => {
+  fps = Math.max(1, fps - 1)
+  sprite.animationSpeed = fps / 60
+  updateFpsLabel()
+})
+
+document.getElementById('btn-faster').addEventListener('click', () => {
+  fps = Math.min(24, fps + 1)
+  sprite.animationSpeed = fps / 60
+  updateFpsLabel()
+})
+
+// ── Resize ────────────────────────────────────────────────────────────────────
+window.addEventListener('resize', () => {
+  W = app.screen.width
+  H = app.screen.height
+  const s = (H * 0.65) / frameH
+  sprite.scale.set(s)
+  sprite.x = W / 2
+  sprite.y = H * 0.88
+})
+
+playAnimation('idle')
+console.log(`Sprite demo ready. Sheet: ${sheetW}×${sheetH}, frames: ${frameW}×${frameH}`)
+
+</script>
+</body>
+</html>

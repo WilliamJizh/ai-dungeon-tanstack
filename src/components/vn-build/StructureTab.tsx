@@ -1,87 +1,16 @@
 import { useState } from 'react';
-import type { PlanDraftState, DraftAct, DraftScene } from '../../hooks/usePlanDraft';
+import type { PlanDraftState, DraftNode } from '../../hooks/usePlanDraft';
 import { FONT_MAIN as font } from '../../lib/fonts';
 const subtle = 'rgba(255,255,255,.18)';
 const gold = 'rgba(255,198,70,.85)';
 const blue = 'rgba(140,210,255,.7)';
 const green = 'rgba(80,220,120,.8)';
 
-function SceneRow({ scene, isLast }: { scene: DraftScene; isLast: boolean }) {
+function NodeRow({ node, isLast }: { node: DraftNode; isLast: boolean }) {
   const [open, setOpen] = useState(false);
 
   return (
-    <div style={{ marginLeft: 16, borderLeft: `1px solid ${subtle}`, paddingLeft: 12, marginBottom: isLast ? 0 : 4 }}>
-      <button
-        onClick={() => setOpen(o => !o)}
-        style={{
-          background: 'none',
-          border: 'none',
-          cursor: 'pointer',
-          padding: 0,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 6,
-          width: '100%',
-          textAlign: 'left',
-        }}
-      >
-        <span style={{ fontSize: 11, color: subtle }}>{open ? '▼' : '▶'}</span>
-        <span style={{ fontSize: 13, color: 'rgba(255,255,255,.75)', letterSpacing: '.06em' }}>
-          {scene.title}
-        </span>
-        {scene.mood && (
-          <span style={{ fontSize: 11, color: blue, marginLeft: 4 }}>♪ {scene.mood}</span>
-        )}
-        {scene.backgroundUrl && (
-          <span style={{ fontSize: 10, color: green, marginLeft: 4 }}>✓ bg</span>
-        )}
-        {scene.musicUrl && (
-          <span style={{ fontSize: 10, color: green }}>✓ ♫</span>
-        )}
-      </button>
-
-      {open && (
-        <div style={{ marginTop: 6, paddingBottom: 8 }}>
-          {scene.backgroundUrl && (
-            <img
-              src={scene.backgroundUrl}
-              alt={scene.title}
-              style={{
-                display: 'block',
-                width: '100%',
-                maxHeight: 70,
-                objectFit: 'cover',
-                borderRadius: 3,
-                border: `1px solid ${subtle}`,
-                marginBottom: 6,
-              }}
-            />
-          )}
-          {scene.beats?.length > 0 && (
-            <ul style={{ margin: '0 0 4px 14px', padding: 0 }}>
-              {scene.beats.map((beat, i) => (
-                <li key={i} style={{ fontSize: 12, color: 'rgba(255,255,255,.5)', lineHeight: 1.6 }}>
-                  {beat}
-                </li>
-              ))}
-            </ul>
-          )}
-          {scene.exitConditions?.length > 0 && (
-            <div style={{ fontSize: 11, color: subtle, marginTop: 4 }}>
-              EXIT: {scene.exitConditions.join(' · ')}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ActRow({ act }: { act: DraftAct }) {
-  const [open, setOpen] = useState(true);
-
-  return (
-    <div style={{ marginBottom: 10 }}>
+    <div style={{ marginLeft: 6, borderLeft: `1px solid ${subtle}`, paddingLeft: 12, marginBottom: isLast ? 0 : 8 }}>
       <button
         onClick={() => setOpen(o => !o)}
         style={{
@@ -96,20 +25,60 @@ function ActRow({ act }: { act: DraftAct }) {
           textAlign: 'left',
         }}
       >
-        <span style={{ fontSize: 12, color: subtle }}>{open ? '▼' : '▶'}</span>
-        <span style={{ fontSize: 14, color: gold, letterSpacing: '.1em', textTransform: 'uppercase' }}>
-          {act.title}
+        <span style={{ fontSize: 11, color: subtle }}>{open ? '▼' : '▶'}</span>
+        <span style={{ fontSize: 14, color: gold, letterSpacing: '.06em' }}>
+          {node.title}
         </span>
-        <span style={{ fontSize: 11, color: subtle }}>
-          {act.scenes.length} scene{act.scenes.length !== 1 ? 's' : ''}
-        </span>
+        {node.mood && (
+          <span style={{ fontSize: 11, color: blue, marginLeft: 4 }}>♪ {node.mood}</span>
+        )}
+        {node.backgroundUrl && (
+          <span style={{ fontSize: 10, color: green, marginLeft: 4 }}>✓ bg</span>
+        )}
+        {node.musicUrl && (
+          <span style={{ fontSize: 10, color: green }}>✓ ♫</span>
+        )}
       </button>
 
-      {open && act.scenes.length > 0 && (
-        <div style={{ marginTop: 4 }}>
-          {act.scenes.map((scene, i) => (
-            <SceneRow key={scene.id} scene={scene} isLast={i === act.scenes.length - 1} />
-          ))}
+      {open && (
+        <div style={{ marginTop: 6, paddingBottom: 8 }}>
+          {node.backgroundUrl && (
+            <img
+              src={node.backgroundUrl}
+              alt={node.title}
+              style={{
+                display: 'block',
+                width: '100%',
+                maxHeight: 120,
+                objectFit: 'cover',
+                borderRadius: 4,
+                border: `1px solid ${subtle}`,
+                marginBottom: 8,
+              }}
+            />
+          )}
+          {node.beats?.length > 0 && (
+            <ul style={{ margin: '0 0 8px 16px', padding: 0 }}>
+              {node.beats.map((beat, i) => (
+                <li key={i} style={{ fontSize: 12, color: 'rgba(255,255,255,.6)', lineHeight: 1.6, margin: '4px 0' }}>
+                  {beat.title && <strong style={{ color: gold, marginRight: 4 }}>{beat.title}:</strong>}
+                  {beat.description}
+                  {beat.objective && <div style={{ color: gold, fontSize: 11 }}>Obj: {beat.objective}</div>}
+                  {beat.pacing && <div style={{ color: subtle, fontSize: 11 }}>Pacing: {beat.pacing}</div>}
+                </li>
+              ))}
+            </ul>
+          )}
+          {node.exitConditions?.length > 0 && (
+            <div style={{ fontSize: 11, color: blue, marginTop: 4, background: 'rgba(140,210,255,0.1)', padding: '4px 8px', borderRadius: 4 }}>
+              <strong>Exits:</strong>
+              <ul style={{ margin: '2px 0 0 16px', padding: 0 }}>
+                {node.exitConditions.map((exit, i) => (
+                  <li key={i}>{exit.condition} ➔ {exit.nextNodeId || 'END'}</li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -117,10 +86,10 @@ function ActRow({ act }: { act: DraftAct }) {
 }
 
 export function StructureTab({ draft }: { draft: PlanDraftState }) {
-  if (!draft.premise && draft.acts.length === 0) {
+  if (!draft.premise && draft.nodes.length === 0) {
     return (
       <div style={{ padding: 20, color: 'rgba(255,255,255,.25)', fontSize: 13, letterSpacing: '.08em', fontFamily: font }}>
-        Story structure will appear as the agent proposes acts and scenes.
+        Story structure will appear as the agent drafts Nodes.
       </div>
     );
   }
@@ -145,11 +114,11 @@ export function StructureTab({ draft }: { draft: PlanDraftState }) {
         </div>
       )}
 
-      {draft.acts.map(act => (
-        <ActRow key={act.id} act={act} />
+      {draft.nodes.map((node, i) => (
+        <NodeRow key={node.id} node={node} isLast={i === draft.nodes.length - 1} />
       ))}
 
-      {draft.premise?.possibleEndings?.length > 0 && (
+      {draft.premise?.possibleEndings && draft.premise.possibleEndings.length > 0 && (
         <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid rgba(255,255,255,.08)` }}>
           <div style={{ fontSize: 11, letterSpacing: '.16em', color: subtle, marginBottom: 6 }}>
             ENDINGS

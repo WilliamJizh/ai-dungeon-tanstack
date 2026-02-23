@@ -9,7 +9,7 @@ import { generateAmbientMusic } from '../../lib/musicGen.js';
  */
 export const musicGenTool = tool({
   description: 'Generate ambient music track. assetId becomes the lookup key in AssetPack.music. Returns raw PCM audio.',
-  parameters: z.object({
+  inputSchema: z.object({
     assetId: z.string().describe('Stable ID for this music asset, e.g. "ambient-rain", "tension-chase"'),
     prompts: z.array(z.object({
       text: z.string(),

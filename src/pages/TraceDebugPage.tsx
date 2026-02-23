@@ -14,6 +14,9 @@ interface TraceSummary {
   modelId: string;
   status: TraceStatus;
   durationMs: number | null;
+  source: string | null;
+  tags: string[] | null;
+  meta: Record<string, unknown> | null;
 }
 
 interface TraceStep {
@@ -32,7 +35,7 @@ interface TraceDetail extends TraceSummary {
   input: unknown;
   output: unknown;
   error: unknown;
-  meta: unknown;
+  meta: Record<string, unknown> | null;
   steps: TraceStep[];
 }
 
@@ -113,10 +116,11 @@ export function TraceDebugPage() {
   const [pipeline, setPipeline] = useState(search.pipeline ?? '');
   const [agentId, setAgentId] = useState(search.agentId ?? '');
   const [status, setStatus] = useState(search.status ?? '');
+  const [source, setSource] = useState(search.source ?? '');
 
   const filters = useMemo(
-    () => ({ sessionId: sessionId.trim(), requestId: requestId.trim(), pipeline: pipeline.trim(), agentId: agentId.trim(), status }),
-    [sessionId, requestId, pipeline, agentId, status],
+    () => ({ sessionId: sessionId.trim(), requestId: requestId.trim(), pipeline: pipeline.trim(), agentId: agentId.trim(), status, source: source.trim() }),
+    [sessionId, requestId, pipeline, agentId, status, source],
   );
 
   const loadTraces = useCallback(async () => {
@@ -129,6 +133,7 @@ export function TraceDebugPage() {
       if (filters.pipeline) params.set('pipeline', filters.pipeline);
       if (filters.agentId) params.set('agentId', filters.agentId);
       if (filters.status) params.set('status', filters.status);
+      if (filters.source) params.set('source', filters.source);
       params.set('limit', '100');
 
       const res = await fetch(`/api/debug/traces?${params.toString()}`);
@@ -147,7 +152,7 @@ export function TraceDebugPage() {
     } finally {
       setIsLoadingList(false);
     }
-  }, [filters.sessionId, filters.requestId, filters.pipeline, filters.agentId, filters.status, selectedId]);
+  }, [filters.sessionId, filters.requestId, filters.pipeline, filters.agentId, filters.status, filters.source, selectedId]);
 
   const loadTraceById = useCallback(async (traceId: string) => {
     setIsLoadingTrace(true);
@@ -212,7 +217,8 @@ export function TraceDebugPage() {
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, minmax(0, 1fr))', gap: 8 }}>
           <input value={sessionId} onChange={(e) => setSessionId(e.target.value)} placeholder="sessionId" style={{ ...inputStyle, gridColumn: 'span 2' }} />
-          <input value={requestId} onChange={(e) => setRequestId(e.target.value)} placeholder="requestId" style={{ ...inputStyle, gridColumn: 'span 2' }} />
+          <input value={requestId} onChange={(e) => setRequestId(e.target.value)} placeholder="requestId" style={inputStyle} />
+          <input value={source} onChange={(e) => setSource(e.target.value)} placeholder="source (e.g. test_storyteller)" style={inputStyle} />
           <input value={pipeline} onChange={(e) => setPipeline(e.target.value)} placeholder="pipeline" style={inputStyle} />
           <input value={agentId} onChange={(e) => setAgentId(e.target.value)} placeholder="agentId" style={inputStyle} />
           <select value={status} onChange={(e) => setStatus(e.target.value)} style={inputStyle}>
@@ -221,6 +227,9 @@ export function TraceDebugPage() {
             <option value="success">success</option>
             <option value="error">error</option>
           </select>
+          <button type="button" onClick={() => {
+            setSessionId(''); setRequestId(''); setPipeline(''); setAgentId(''); setStatus(''); setSource('');
+          }} style={{ ...buttonStyle, background: '#1c1917', color: '#a8a29e' }}>Clear</button>
           <button type="button" onClick={() => void loadTraces()} style={buttonStyle} disabled={isLoadingList}>
             {isLoadingList ? 'Refreshing...' : 'Refresh'}
           </button>
@@ -262,6 +271,19 @@ export function TraceDebugPage() {
                     <span style={{ color: statusColor(trace.status), fontSize: 12 }}>{trace.status}</span>
                   </div>
                   <div style={{ fontSize: 11, color: '#94a3b8' }}>{trace.agentId} · {trace.modelId}</div>
+                  {trace.source && <div style={{ fontSize: 11, color: '#7dd3fc' }}>source: {trace.source}</div>}
+                  {trace.meta && (
+                    <div style={{ fontSize: 11, color: '#a78bfa', marginTop: 2 }}>
+                      {(trace.meta as any).frameCount != null && `frames: ${(trace.meta as any).frameCount}`}
+                      {(trace.meta as any).stepCount != null && ` · steps: ${(trace.meta as any).stepCount}`}
+                      {(trace.meta as any).toolCallCount != null && ` · tools: ${(trace.meta as any).toolCallCount}`}
+                    </div>
+                  )}
+                  {trace.tags && trace.tags.length > 0 && (
+                    <div style={{ fontSize: 10, color: '#6ee7b7', marginTop: 2 }}>
+                      {trace.tags.map(t => `#${t}`).join(' ')}
+                    </div>
+                  )}
                   <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>{fmtDate(trace.createdAt)}</div>
                   <div style={{ fontSize: 11, color: '#64748b' }}>duration: {fmtDuration(trace.durationMs)}</div>
                   <div style={{ fontSize: 10, color: '#475569', marginTop: 4, wordBreak: 'break-all' }}>{trace.id}</div>
@@ -280,8 +302,8 @@ export function TraceDebugPage() {
                   <InfoCard label="Status" value={selectedTrace.status} />
                   <InfoCard label="Duration" value={fmtDuration(selectedTrace.durationMs)} />
                   <InfoCard label="Steps" value={String(selectedTrace.steps.length)} />
-                  <InfoCard label="Session" value={selectedTrace.sessionId ?? '-'} />
-                  <InfoCard label="Request" value={selectedTrace.requestId ?? '-'} />
+                  <InfoCard label="Session" value={selectedTrace.sessionId ?? '-'} copyable />
+                  <InfoCard label="Source" value={(selectedTrace as any).source ?? '-'} />
                   <InfoCard label="Pipeline" value={selectedTrace.pipeline} />
                   <InfoCard label="Agent" value={`${selectedTrace.agentId} (${selectedTrace.modelId})`} />
                 </div>
@@ -360,10 +382,14 @@ export function TraceDebugPage() {
   );
 }
 
-function InfoCard({ label, value }: { label: string; value: string }) {
+function InfoCard({ label, value, copyable }: { label: string; value: string; copyable?: boolean }) {
   return (
-    <div style={{ background: '#020617', border: '1px solid #1e293b', borderRadius: 6, padding: 8 }}>
-      <div style={{ fontSize: 10, color: '#64748b', marginBottom: 4 }}>{label}</div>
+    <div
+      style={{ background: '#020617', border: '1px solid #1e293b', borderRadius: 6, padding: 8, cursor: copyable ? 'pointer' : undefined }}
+      onClick={copyable ? () => { void navigator.clipboard.writeText(value); } : undefined}
+      title={copyable ? 'Click to copy' : undefined}
+    >
+      <div style={{ fontSize: 10, color: '#64748b', marginBottom: 4 }}>{label}{copyable ? ' 📋' : ''}</div>
       <div style={{ fontSize: 12, color: '#e2e8f0', wordBreak: 'break-all' }}>{value}</div>
     </div>
   );

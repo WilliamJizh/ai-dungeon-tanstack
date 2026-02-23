@@ -14,6 +14,9 @@ sqlite.pragma('journal_mode = WAL');
 /** Drizzle ORM instance. Use this for all database queries. */
 export const db = drizzle(sqlite, { schema });
 
+/** Raw better-sqlite3 instance for when Drizzle is unreliable (e.g. trace inserts). */
+export { sqlite };
+
 // Create tables if they don't exist (simple migration for dev)
 sqlite.exec(`
   CREATE TABLE IF NOT EXISTS vn_packages (
@@ -73,8 +76,8 @@ sqlite.exec(`
 `);
 
 // Add player_stats_json column if it doesn't exist (migration)
-try { sqlite.exec(`ALTER TABLE plot_states ADD COLUMN player_stats_json TEXT NOT NULL DEFAULT '{}'`); } catch (_) {}
+try { sqlite.exec(`ALTER TABLE plot_states ADD COLUMN player_stats_json TEXT NOT NULL DEFAULT '{}'`); } catch (_) { }
 
 // Add tags/source columns to ai_traces if they don't exist (migration)
-try { sqlite.exec(`ALTER TABLE ai_traces ADD COLUMN tags TEXT`); } catch (_) {}
-try { sqlite.exec(`ALTER TABLE ai_traces ADD COLUMN source TEXT`); } catch (_) {}
+try { sqlite.exec(`ALTER TABLE ai_traces ADD COLUMN tags TEXT`); } catch (_) { }
+try { sqlite.exec(`ALTER TABLE ai_traces ADD COLUMN source TEXT`); } catch (_) { }

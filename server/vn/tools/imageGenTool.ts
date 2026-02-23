@@ -9,7 +9,7 @@ import { generateSceneImage, generateCharacterImage } from '../../lib/imageGen.j
  */
 export const imageGenTool = tool({
   description: 'Generate a scene background or character portrait. assetId becomes the lookup key in the VNPackage asset pack.',
-  parameters: z.object({
+  inputSchema: z.object({
     assetId: z.string().describe('Stable ID for this asset, used as the lookup key in AssetPack'),
     prompt: z.string().describe('Image generation prompt (art style will be prepended by the agent)'),
     type: z.enum(['scene', 'character']).describe('scene = 16:9 background, character = portrait with transparent background'),

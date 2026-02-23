@@ -11,19 +11,25 @@ export interface DraftCharacter {
   imageUrl?: string;
 }
 
-export interface DraftAct {
+export interface DraftBeat {
   id: string;
   title: string;
-  scenes: DraftScene[];
+  description: string;
+  pacing: string;
+  findings?: string[];
+  interactables?: string[];
+  foreshadowing?: string;
+  objective?: string;
+  nextBeatIfFailed?: string;
+  musicUrl?: string;
 }
 
-export interface DraftScene {
+export interface DraftNode {
   id: string;
-  actId: string;
   title: string;
   location: string;
-  beats: string[];
-  exitConditions: string[];
+  beats: DraftBeat[];
+  exitConditions: { condition: string; nextNodeId?: string }[];
   mood: string;
   backgroundUrl?: string;
   musicUrl?: string;
@@ -41,7 +47,7 @@ export interface DraftPremise {
 export interface PlanDraftState {
   premise?: DraftPremise;
   characters: DraftCharacter[];
-  acts: DraftAct[];
+  nodes: DraftNode[];
   packageId?: string;
 }
 
@@ -53,8 +59,7 @@ export function usePlanDraft(messages: PlanningUIMessage[]): PlanDraftState {
   return useMemo(() => {
     const premiseMap = new Map<string, DraftPremise>();
     const characterMap = new Map<string, DraftCharacter>();
-    const actMap = new Map<string, { id: string; title: string }>();
-    const sceneMap = new Map<string, DraftScene>();
+    const sceneMap = new Map<string, DraftNode>();
     let packageId: string | undefined;
 
     for (const msg of messages) {
@@ -73,25 +78,42 @@ export function usePlanDraft(messages: PlanningUIMessage[]): PlanDraftState {
           characterMap.set(input.id, { ...input, imageUrl: output?.imageUrl });
         }
 
-        if (part.type === 'tool-proposeAct') {
-          const input = (part as { input: { id: string; title: string } }).input;
-          actMap.set(input.id, input);
-        }
-
-        if (part.type === 'tool-proposeScene') {
-          const input = (part as { input: DraftScene & { backgroundPrompt: string; musicPrompts: unknown[] } }).input;
-          const output = (part as { output: { backgroundUrl?: string; musicUrl?: string } }).output;
+        if (part.type === 'tool-draftNodeOutline') {
+          const input = (part as { input: { id: string; title: string; location: string } }).input;
+          const current = sceneMap.get(input.id);
           sceneMap.set(input.id, {
             id: input.id,
-            actId: input.actId,
             title: input.title,
             location: input.location,
-            beats: input.beats,
-            exitConditions: input.exitConditions,
-            mood: input.mood,
-            backgroundUrl: output?.backgroundUrl,
-            musicUrl: output?.musicUrl,
+            beats: current?.beats || [],
+            exitConditions: (input as any).exitConditions || [],
+            mood: (input as any).mood || '',
+            backgroundUrl: current?.backgroundUrl,
+            musicUrl: current?.musicUrl,
           });
+        }
+
+        if (part.type === 'tool-draftNodeBeats') {
+          const input = (part as { input: { nodeId: string; beats: any[] } }).input;
+          const current = sceneMap.get(input.nodeId);
+          if (current) {
+            current.beats = input.beats.map((b, i) => ({
+              ...b,
+              id: `${current.id}-beat-${i + 1}`,
+              title: `Beat ${i + 1}`,
+              musicUrl: current.musicUrl
+            })) as DraftBeat[];
+          }
+        }
+
+        if (part.type === 'tool-finalizeNode') {
+          const input = (part as { input: { nodeId: string } }).input;
+          const output = (part as { output: { backgroundUrl?: string; musicUrl?: string } }).output;
+          const current = sceneMap.get(input.nodeId);
+          if (current) {
+            current.backgroundUrl = output?.backgroundUrl;
+            current.musicUrl = output?.musicUrl;
+          }
         }
 
         if (part.type === 'tool-updateElement') {
@@ -100,13 +122,9 @@ export function usePlanDraft(messages: PlanningUIMessage[]): PlanDraftState {
             const existing = characterMap.get(input.id);
             if (existing) characterMap.set(input.id, { ...existing, ...input.changes as Partial<DraftCharacter> });
           }
-          if (input.type === 'act' && input.id) {
-            const existing = actMap.get(input.id);
-            if (existing) actMap.set(input.id, { ...existing, ...input.changes as Partial<{ id: string; title: string }> });
-          }
-          if (input.type === 'scene' && input.id) {
+          if (input.type === 'node' && input.id) {
             const existing = sceneMap.get(input.id);
-            if (existing) sceneMap.set(input.id, { ...existing, ...input.changes as Partial<DraftScene> });
+            if (existing) sceneMap.set(input.id, { ...existing, ...input.changes as Partial<DraftNode> });
           }
           if (input.type === 'premise') {
             const existing = premiseMap.get('premise');
@@ -121,15 +139,12 @@ export function usePlanDraft(messages: PlanningUIMessage[]): PlanDraftState {
       }
     }
 
-    const acts: DraftAct[] = Array.from(actMap.values()).map(act => ({
-      ...act,
-      scenes: Array.from(sceneMap.values()).filter(s => s.actId === act.id),
-    }));
+    const nodes: DraftNode[] = Array.from(sceneMap.values());
 
     return {
       premise: premiseMap.get('premise'),
       characters: Array.from(characterMap.values()),
-      acts,
+      nodes,
       packageId,
     };
   }, [messages]);

@@ -19,8 +19,8 @@ import { t } from '../lib/i18n';
 interface StorytellerSessionProps {
   vnPackage: VNPackage;
   sessionId: string;
-  currentSceneId: string;
-  onSceneComplete: (nextSceneId: string) => void;
+  currentNodeId: string;
+  onNodeComplete: (nextNodeId: string) => void;
   isMuted: boolean;
   onToggleMute: () => void;
 }
@@ -28,8 +28,8 @@ interface StorytellerSessionProps {
 function StorytellerSession({
   vnPackage,
   sessionId,
-  currentSceneId,
-  onSceneComplete,
+  currentNodeId,
+  onNodeComplete,
   isMuted,
   onToggleMute,
 }: StorytellerSessionProps) {
@@ -75,18 +75,18 @@ function StorytellerSession({
     [messages],
   );
 
-  // Detect pending scene completion from the latest sceneCompleteTool output
-  const pendingSceneComplete = useMemo<string | null | undefined>(() => {
+  // Detect pending node completion from the latest nodeCompleteTool output
+  const pendingNodeComplete = useMemo<string | null | undefined>(() => {
     for (const msg of [...messages].reverse()) {
       if (msg.role !== 'assistant') continue;
       for (const part of [...msg.parts].reverse()) {
         if (
           isToolUIPart(part) &&
-          part.type === 'tool-sceneCompleteTool' &&
+          part.type === 'tool-nodeCompleteTool' &&
           part.state === 'output-available'
         ) {
-          const out = (part as { output: { nextSceneId?: string | null } }).output;
-          return out.nextSceneId ?? null;
+          const out = (part as { output: { nextNodeId?: string | null } }).output;
+          return out.nextNodeId ?? null;
         }
       }
     }
@@ -113,12 +113,12 @@ function StorytellerSession({
   return (
     <VNRenderer
       frames={frames}
-      pendingSceneComplete={pendingSceneComplete}
+      pendingNodeComplete={pendingNodeComplete}
       isLoading={isLoading}
       onPlayerAction={handlePlayerAction}
       pack={vnPackage}
-      currentSceneId={currentSceneId}
-      onSceneComplete={onSceneComplete}
+      currentNodeId={currentNodeId}
+      onNodeComplete={onNodeComplete}
       isMuted={isMuted}
       onToggleMute={onToggleMute}
     />
@@ -129,7 +129,7 @@ function StorytellerSession({
 
 export function VNEnginePage() {
   const navigate = useNavigate();
-  const { isHydrated, vnPackage, sessionId, currentSceneId, advanceScene } = useVN();
+  const { isHydrated, vnPackage, sessionId, currentNodeId, advanceNode } = useVN();
   const { locale, setLocale } = useLocale();
   const [isMuted, setIsMuted] = useState(false);
 
@@ -156,14 +156,14 @@ export function VNEnginePage() {
     });
   }, []);
 
-  const handleSceneComplete = useCallback(
-    (nextSceneId: string) => {
-      advanceScene(nextSceneId);
+  const handleNodeComplete = useCallback(
+    (nextNodeId: string) => {
+      advanceNode(nextNodeId);
     },
-    [advanceScene],
+    [advanceNode],
   );
 
-  if (!isHydrated || !vnPackage || !currentSceneId) return null;
+  if (!isHydrated || !vnPackage || !currentNodeId) return null;
 
   if (isViewportTooSmall) {
     return (
@@ -209,11 +209,11 @@ export function VNEnginePage() {
         }}
       >
         <StorytellerSession
-          key={`${sessionId}--${currentSceneId}`}
+          key={`${sessionId}--${currentNodeId}`}
           vnPackage={vnPackage}
           sessionId={sessionId}
-          currentSceneId={currentSceneId}
-          onSceneComplete={handleSceneComplete}
+          currentNodeId={currentNodeId}
+          onNodeComplete={handleNodeComplete}
           isMuted={isMuted}
           onToggleMute={handleToggleMute}
         />

@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { createAgentUIStreamResponse } from 'ai';
 import { createPlanningAgent } from '../agents/planningChatAgent.js';
 import { getOrCreatePlanSession } from '../state/planSessionStore.js';
-import { createPlanChatTrace } from '../../debug/tracePlanChat.js';
+import { startLLMTrace, MODEL_IDS } from '../../lib/modelFactory.js';
 
 function extractFileParts(messages: unknown[]): Array<{ url: string; mediaType: string }> {
   const result: Array<{ url: string; mediaType: string }> = [];
@@ -51,10 +51,12 @@ export async function planChatRoute(app: FastifyInstance) {
     }
 
     const agent = createPlanningAgent(session);
-    const { traceId, onStepFinish, finishTrace } = createPlanChatTrace({
-      sessionId,
-      requestId: req.id,
-    });
+    const { traceId, onStepFinish, finishTrace } = startLLMTrace({
+      sessionId, requestId: req.id,
+      pipeline: 'vn-plan-chat', agentId: 'planning-chat-agent',
+      modelProvider: 'google', modelId: MODEL_IDS.planning,
+      tags: ['agent', 'plan-chat'], source: 'planChatRoute',
+    }, { pipeline: 'vn-plan-chat', sessionId });
 
     req.log.info({ traceId }, '[VN plan/chat] trace started');
 
