@@ -9,78 +9,82 @@ import type { VNPackage } from '../types/vnTypes.js';
  * Resolves the next node after the completed node
  * by checking if the LLM provided one, or falling back to the plot nodes array.
  */
-function resolveNextNode(
+function resolveNextLocation(
   pkg: VNPackage,
-  completedNodeId: string,
-): { nextNodeId: string | null; nextActId: string | null } {
+  completedLocationId: string,
+): { nextLocationId: string | null; nextActId: string | null } {
   const acts = pkg.plot.acts;
+  if (!acts) return { nextLocationId: null, nextActId: null };
+
   for (let ai = 0; ai < acts.length; ai++) {
-    const nodes = acts[ai].nodes;
-    for (let ni = 0; ni < nodes.length; ni++) {
-      if (nodes[ni].id === completedNodeId) {
-        if (ni + 1 < nodes.length) {
-          return { nextNodeId: nodes[ni + 1].id, nextActId: acts[ai].id };
+    const locations = acts[ai].sandboxLocations;
+    if (!locations) continue;
+
+    for (let ni = 0; ni < locations.length; ni++) {
+      if (locations[ni].id === completedLocationId) {
+        if (ni + 1 < locations.length) {
+          return { nextLocationId: locations[ni + 1].id, nextActId: acts[ai].id };
         } else if (ai + 1 < acts.length) {
-          return { nextNodeId: acts[ai + 1].nodes[0]?.id || null, nextActId: acts[ai + 1].id };
+          return { nextLocationId: acts[ai + 1].sandboxLocations?.[0]?.id || null, nextActId: acts[ai + 1].id };
         }
-        return { nextNodeId: null, nextActId: null };
+        return { nextLocationId: null, nextActId: null };
       }
     }
   }
-  return { nextNodeId: null, nextActId: null };
+  return { nextLocationId: null, nextActId: null };
 }
 
 /**
- * Marks the current node as complete and returns the next node ID.
+ * Marks the current node as complete and returns the next location ID.
  * Storyteller calls this when exit conditions are met.
  */
 export const nodeCompleteTool = tool({
   description: 'Mark current node as complete and get next node ID. Call when exit conditions are met.',
   inputSchema: z.object({
     sessionId: z.string(),
-    completedNodeId: z.string().optional().describe('Optional: the ID of the node that was just completed'),
-    nextNodeId: z.string().optional().describe('The ID of the next node to transition to'),
+    completedLocationId: z.string().optional().describe('Optional: the ID of the location that was just completed'),
+    nextLocationId: z.string().optional().describe('The ID of the next location to transition to'),
   }),
-  execute: async ({ sessionId, completedNodeId: userCompletedNodeId, nextNodeId: nextNodeIdParam, nextActId: nextActIdParam }: { sessionId: string, completedNodeId?: string, nextNodeId?: string, nextActId?: string }) => {
+  execute: async ({ sessionId, completedLocationId: userCompletedLocationId, nextLocationId: nextLocationIdParam, nextActId: nextActIdParam }: { sessionId: string, completedLocationId?: string, nextLocationId?: string, nextActId?: string }) => {
     const state = db.select().from(plotStates).where(eq(plotStates.sessionId, sessionId)).get();
 
     if (!state) {
       return { ok: false as const, error: 'No plot state found for session' };
     }
 
-    const completedNodeId = userCompletedNodeId || state.currentNodeId;
-    if (!completedNodeId) {
-      return { ok: false as const, error: 'No current node ID found' };
+    const completedLocationId = userCompletedLocationId || state.currentLocationId;
+    if (!completedLocationId) {
+      return { ok: false as const, error: 'No current location ID found' };
     }
 
     // Auto-resolve next node from the plot if the LLM didn't provide one
-    let resolvedNextNodeId = nextNodeIdParam ?? null;
+    let resolvedNextLocationId = nextLocationIdParam ?? null;
     let resolvedNextActId = nextActIdParam ?? null;
 
-    if (!resolvedNextNodeId) {
+    if (!resolvedNextLocationId) {
       const pkgRow = db.select().from(vnPackages).where(eq(vnPackages.id, state.packageId)).get();
       if (pkgRow) {
         const pkg = JSON.parse(pkgRow.metaJson) as VNPackage;
-        const resolved = resolveNextNode(pkg, completedNodeId);
-        resolvedNextNodeId = resolved.nextNodeId;
+        const resolved = resolveNextLocation(pkg, completedLocationId);
+        resolvedNextLocationId = resolved.nextLocationId;
         if (!resolvedNextActId) resolvedNextActId = resolved.nextActId;
       }
     }
 
-    const completedNodes: string[] = JSON.parse(state.completedNodes || "[]");
-    if (!completedNodes.includes(completedNodeId)) {
-      completedNodes.push(completedNodeId);
+    const completedLocations: string[] = JSON.parse(state.completedLocations || "[]");
+    if (!completedLocations.includes(completedLocationId)) {
+      completedLocations.push(completedLocationId);
     }
 
     const updates: Record<string, unknown> = {
-      completedNodes: JSON.stringify(completedNodes),
+      completedLocations: JSON.stringify(completedLocations),
       currentBeat: 0,
       offPathTurns: 0,
       updatedAt: new Date().toISOString(),
     };
 
-    if (resolvedNextNodeId) {
-      updates.currentNodeId = resolvedNextNodeId;
+    if (resolvedNextLocationId) {
+      updates.currentLocationId = resolvedNextLocationId;
     }
     if (resolvedNextActId) {
       updates.currentActId = resolvedNextActId;
@@ -88,12 +92,12 @@ export const nodeCompleteTool = tool({
 
     db.update(plotStates).set(updates).where(eq(plotStates.sessionId, sessionId)).run();
 
-    const isGameComplete = !resolvedNextNodeId;
+    const isGameComplete = !resolvedNextLocationId;
 
     return {
       ok: true as const,
-      completedNodeId,
-      nextNodeId: resolvedNextNodeId,
+      completedLocationId,
+      nextLocationId: resolvedNextLocationId,
       isGameComplete,
     };
   },

@@ -19,7 +19,7 @@ import { t } from '../lib/i18n';
 interface StorytellerSessionProps {
   vnPackage: VNPackage;
   sessionId: string;
-  currentNodeId: string;
+  currentLocationId: string;
   onNodeComplete: (nextNodeId: string) => void;
   isMuted: boolean;
   onToggleMute: () => void;
@@ -28,7 +28,7 @@ interface StorytellerSessionProps {
 function StorytellerSession({
   vnPackage,
   sessionId,
-  currentNodeId,
+  currentLocationId,
   onNodeComplete,
   isMuted,
   onToggleMute,
@@ -117,7 +117,7 @@ function StorytellerSession({
       isLoading={isLoading}
       onPlayerAction={handlePlayerAction}
       pack={vnPackage}
-      currentNodeId={currentNodeId}
+      currentLocationId={currentLocationId}
       onNodeComplete={onNodeComplete}
       isMuted={isMuted}
       onToggleMute={onToggleMute}
@@ -129,7 +129,7 @@ function StorytellerSession({
 
 export function VNEnginePage() {
   const navigate = useNavigate();
-  const { isHydrated, vnPackage, sessionId, currentNodeId, advanceNode } = useVN();
+  const { isHydrated, vnPackage, sessionId, currentLocationId, advanceLocation } = useVN();
   const { locale, setLocale } = useLocale();
   const [isMuted, setIsMuted] = useState(false);
 
@@ -157,13 +157,13 @@ export function VNEnginePage() {
   }, []);
 
   const handleNodeComplete = useCallback(
-    (nextNodeId: string) => {
-      advanceNode(nextNodeId);
+    (nextLocationId: string) => {
+      advanceLocation(nextLocationId);
     },
-    [advanceNode],
+    [advanceLocation],
   );
 
-  if (!isHydrated || !vnPackage || !currentNodeId) return null;
+  if (!isHydrated || !vnPackage || !currentLocationId) return null;
 
   if (isViewportTooSmall) {
     return (
@@ -209,10 +209,10 @@ export function VNEnginePage() {
         }}
       >
         <StorytellerSession
-          key={`${sessionId}--${currentNodeId}`}
+          key={`${sessionId}--${currentLocationId}`}
           vnPackage={vnPackage}
           sessionId={sessionId}
-          currentNodeId={currentNodeId}
+          currentLocationId={currentLocationId}
           onNodeComplete={handleNodeComplete}
           isMuted={isMuted}
           onToggleMute={handleToggleMute}

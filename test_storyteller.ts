@@ -7,15 +7,34 @@ import * as readline from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
 import { createStorytellerAgent } from './server/vn/agents/storytellerChatAgent.js';
 import type { VNPackage } from './server/vn/types/vnTypes.js';
-import { compressContext, summarizeNodeInBackground } from './server/vn/utils/contextCompressor.js';
-import { startLLMTrace, MODEL_IDS } from './server/lib/modelFactory.js';
+import { compressContext, summarizeNodeInBackground, sanitizeHistory } from './server/vn/utils/contextCompressor.js';
+import { startLLMTrace, getActiveModelInfo } from './server/lib/modelFactory.js';
 
-// Get the package ID from the args or use the one we just generated
+// Get the package ID or session ID from the args
 const cliArgs = process.argv.slice(2);
-const packageId = cliArgs[0] || 'e527a879-ef93-41b3-958c-b7540ae0bc47'; // The ID of the generated "Shadows of Blackwood"
+const argId = cliArgs[0] || 'e527a879-ef93-41b3-958c-b7540ae0bc47';
 
 async function run() {
-    console.log(`\nInitializing Storyteller (DM) for package: ${packageId}\n`);
+    console.log(`\nInitializing Storyteller (DM)...`);
+
+    let packageId = argId;
+    let sessionId = randomUUID();
+    let isResuming = false;
+    let existingSummary = '';
+    let startingLocationId = '';
+
+    // Check if arg is a sessionId
+    const existingSession = db.select().from(plotStates).where(eq(plotStates.sessionId, argId)).get();
+    if (existingSession) {
+        console.log(`Resuming existing session: ${argId}`);
+        sessionId = argId;
+        packageId = existingSession.packageId;
+        isResuming = true;
+        existingSummary = existingSession.storySummary || '';
+        startingLocationId = existingSession.currentLocationId || '';
+    } else {
+        console.log(`Starting new session: ${sessionId}`);
+    }
 
     // 1. Fetch package
     const pkgRow = db.select().from(vnPackages).where(eq(vnPackages.id, packageId)).get();
@@ -25,66 +44,77 @@ async function run() {
     }
     const vnPackage = JSON.parse(pkgRow.metaJson) as VNPackage;
 
-    // 2. Initialize plot state
-    const sessionId = randomUUID();
-    console.log(`Session ID: ${sessionId}`);
+    // 2. Initialize plot state (if new)
+    if (!isResuming) {
+        const startingActId = vnPackage.plot.acts[0]?.id;
+        startingLocationId = vnPackage.plot.acts[0]?.sandboxLocations?.[0]?.id || '';
+        if (!startingActId || !startingLocationId) {
+            console.error(`No starting act or node found in package.`);
+            process.exit(1);
+        }
 
-    const startingActId = vnPackage.plot.acts[0]?.id;
-    const startingNodeId = vnPackage.plot.acts[0]?.nodes[0]?.id;
-    if (!startingActId || !startingNodeId) {
-        console.error(`No starting act or node found in package.`);
-        process.exit(1);
+        db.insert(plotStates).values({
+            sessionId,
+            packageId,
+            currentActId: startingActId,
+            currentLocationId: startingLocationId,
+            currentBeat: 0,
+            offPathTurns: 0,
+            flagsJson: '{}',
+            completedLocations: '[]',
+            playerStatsJson: '{}',
+            updatedAt: new Date().toISOString(),
+        } as any).run();
     }
-
-    db.insert(plotStates).values({
-        sessionId,
-        packageId,
-        currentActId: startingActId,
-        currentNodeId: startingNodeId,
-        currentBeat: 0,
-        offPathTurns: 0,
-        flagsJson: '{}',
-        completedNodes: '[]',
-        playerStatsJson: '{}',
-        updatedAt: new Date().toISOString(),
-    } as any).run();
 
     // 3. Create the real ToolLoopAgent — this runs the full loop with tool execution + schema validation
     const agent = createStorytellerAgent(vnPackage, sessionId);
     const rl = readline.createInterface({ input, output });
 
     console.log('----------------------------------------------------');
-    console.log(`Starting Adventure: ${vnPackage.title}`);
+    console.log(`Adventure: ${vnPackage.title}`);
     console.log('----------------------------------------------------');
 
     let keepPlaying = true;
-    // Use ModelMessage format (not UIMessage format) for agent.generate()
-    let messages: any[] = [
-        { role: 'user', content: [{ type: 'text', text: '[scene start]' }] }
-    ];
+    let messages: any[] = [];
+
+    if (isResuming) {
+        messages = [
+            { role: 'user', content: [{ type: 'text', text: `[system: resuming session at location ${startingLocationId}]` }] }
+        ];
+    } else {
+        messages = [
+            { role: 'user', content: [{ type: 'text', text: '[scene start]' }] }
+        ];
+    }
+
     let frameCount = 1;
 
     while (keepPlaying) {
         console.log('\n[DM is thinking...]\n');
 
-        const preTurnState = db.select({ currentNodeId: plotStates.currentNodeId, storySummary: plotStates.storySummary }).from(plotStates).where(eq(plotStates.sessionId, sessionId)).get();
+        const preTurnState = db.select({ currentLocationId: plotStates.currentLocationId, storySummary: plotStates.storySummary }).from(plotStates).where(eq(plotStates.sessionId, sessionId)).get();
         const compressedMessages = await compressContext(messages, sessionId, preTurnState?.storySummary || '') as any[];
 
         console.log(`\n[DEBUG] Sending ${compressedMessages.length} messages to AI SDK.`);
         console.log(`[DEBUG] Roles sequence: ${compressedMessages.map((m: any) => m.role).join(' -> ')}`);
 
         // Create a per-turn trace — the model middleware auto-captures everything
+        const { provider, modelId } = getActiveModelInfo('storyteller');
         const { traceId, onStepFinish, finishTrace } = startLLMTrace({
             sessionId,
             pipeline: 'vn-tell-chat', agentId: 'storyteller-chat-agent',
-            modelProvider: 'google', modelId: MODEL_IDS.storyteller,
+            modelProvider: provider, modelId: modelId,
             tags: ['agent', 'storyteller', 'cli'], source: 'test_storyteller',
         }, { pipeline: 'vn-tell-chat', sessionId });
 
         try {
             // Use agent.generate() — this runs the FULL ToolLoopAgent loop,
-            // executing tools, validating schemas, and stopping on stopWhen conditions.
-            const result = await agent.generate({ messages: compressedMessages });
+            // executng tools, validating schemas, and stopping on stopWhen conditions.
+            const result = await agent.generate({
+                messages: compressedMessages,
+                options: { toolChoice: 'required' } as any
+            });
 
             // Feed each step to the tracer so tool calls + results are recorded
             for (const step of result.steps) {
@@ -211,7 +241,7 @@ async function run() {
 
                     } else if (toolName === 'nodeCompleteTool') {
                         const out = toolOutput as any;
-                        console.log(`\n✅ Node Complete: ${out?.completedNodeId ?? '(node)'}`);
+                        console.log(`\n✅ Location Complete: ${out?.completedLocationId ?? '(location)'}`);
                         if (out?.isGameComplete) {
                             console.log(`\n🎉 GAME OVER!`);
                             keepPlaying = false;
@@ -225,15 +255,17 @@ async function run() {
 
             // Build the next messages array by appending result.response.messages
             // This is the proper way to continue a multi-turn conversation with the AI SDK
-            messages.push(...(result.response.messages as any[]));
+            const appendRaw = result.response.messages as any[];
+            const combined = [...messages, ...appendRaw];
+            messages = sanitizeHistory(combined);
 
-            // Check for node transitions to trigger summarization
+            // Check for location transitions to trigger summarization
             if (preTurnState) {
-                const postTurnState = db.select({ currentNodeId: plotStates.currentNodeId }).from(plotStates).where(eq(plotStates.sessionId, sessionId)).get();
-                if (postTurnState && postTurnState.currentNodeId !== preTurnState.currentNodeId) {
-                    console.log(`\n[Node Transition: ${preTurnState.currentNodeId} -> ${postTurnState.currentNodeId}. Summarizing previous scene...]`);
+                const postTurnState = db.select({ currentLocationId: plotStates.currentLocationId }).from(plotStates).where(eq(plotStates.sessionId, sessionId)).get();
+                if (postTurnState && postTurnState.currentLocationId !== preTurnState.currentLocationId) {
+                    console.log(`\n[Location Transition: ${preTurnState.currentLocationId} -> ${postTurnState.currentLocationId}. Summarizing previous scene...]`);
                     // We DO await this in the CLI to keep console output clean, though it's fire-and-forget in HTTP
-                    await summarizeNodeInBackground(sessionId, messages, preTurnState.storySummary);
+                    await summarizeNodeInBackground(sessionId, messages as any[], preTurnState.storySummary);
                 }
             }
 

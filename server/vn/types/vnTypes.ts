@@ -32,50 +32,83 @@ export const CharacterSchema = z.object({
 });
 
 /**
- * A narrative beat within a node. Instructs the DM on pacing, hidden state,
- * and foreshadowing without revealing the full scene outline prematurely.
+ * Dynamic world info injected via regex keyword matching.
  */
-export const BeatSchema = z.object({
-  description: z.string().describe('The core narrative action or event of this beat'),
-  pacing: z.string().describe('Instructions for the DM on how long the beat should last (e.g., "5-8 frames of rapid back-and-forth dialogue")'),
-  findings: z.array(z.string()).optional().describe('Specific clues uncovered during this exact beat'),
-  interactables: z.array(z.string()).optional().describe('Items relevant or discoverable in this exact beat'),
-  foreshadowing: z.string().optional().describe('Subtle hints to lay the groundwork for future beats, allowing the DM to build tension'),
-  objective: z.string().optional().describe('The specific goal the player must accomplish to successfully complete this beat'),
-  nextBeatIfFailed: z.string().optional().describe('Allows dynamic early exits or branching within a node if the player fails the objective or rolls a Miss'),
+export const WorldInfoSchema = z.object({
+  id: z.string(),
+  keys: z.array(z.string()).describe('Keywords or regex patterns that trigger this info injection'),
+  content: z.string().describe('The lore, entity description, or atmospheric detail to inject'),
+  type: z.enum(['lore', 'entity', 'atmosphere']).default('lore'),
 });
 
 /**
- * A branching Node in the Directed Acyclic Graph (DAG) story structure.
+ * A narrative beat within a location. Instructs the DM on pacing, hidden state,
+ * and foreshadowing without revealing the full scene outline prematurely.
  */
-export const NodeDefinitionSchema = z.object({
+export const BeatSchema = z.object({
+  id: z.string().optional(),
+  description: z.string().describe('The core narrative action or event of this beat'),
+  pacing: z.object({
+    expectedFrames: z.number().describe('How many frames this beat should take approximately'),
+    focus: z.enum(['dialogue_and_worldbuilding', 'standard', 'tension_and_action']).describe('Dictates the frame density (10-20 clicks for dialogue, 5-8 for action)')
+  }),
+  findings: z.array(z.string()).optional().describe('Specific clues uncovered during this exact beat'),
+  interactables: z.array(z.string()).optional().describe('Items relevant or discoverable in this exact beat'),
+  potentialFlags: z.array(z.string()).optional().describe('Semantic state flags the player could earn here (e.g. "barricaded_door", "found_revolver")'),
+  foreshadowing: z.string().optional().describe('Subtle hints to lay the groundwork for future beats, allowing the DM to build tension'),
+});
+
+/**
+ * Predetermined plot events that drive the narrative forward and trigger based on conditions.
+ */
+export const InevitableEventSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  triggerCondition: z.string().describe('When this event should trigger (e.g., "After 5 turns in the mansion" or "If player finds the amulet")'),
+  description: z.string().describe('The narrative event that occurs'),
+  forcesClimax: z.boolean().default(false).describe('If true, this event serves as the climax boundary for the current Act'),
+  beatOverride: BeatSchema.optional().describe('If triggered, this beat overrides the location\'s standard beats'),
+  conditionalBranches: z.array(z.object({
+    condition: z.string().describe('A javascript-like condition checking flags, e.g., "has_flag(\'barricaded_door\')"'),
+    effect: z.string().describe('How the event is altered if this condition is true')
+  })).optional()
+});
+
+/**
+ * A physical location in the sandbox that players can explore.
+ * Replaces the old linear 'Node' concept.
+ */
+export const LocationSchema = z.object({
   id: z.string(),
   title: z.string(),
   /** Key into AssetPack.backgrounds for this node's primary location. */
   location: z.string(),
   /** Character IDs that appear in this node. */
   requiredCharacters: z.array(z.string()),
-  /** Ordered narrative beats guiding the storyteller agent. */
+  /** Sensory details describing the space (smell, temperature, lighting) */
+  ambientDetail: z.string().optional(),
+  /** Ordered narrative beats guiding the storyteller agent within this location. */
   beats: z.array(BeatSchema),
+  /** IDs of other Location objects the player can travel to from here. */
+  connections: z.array(z.string()).describe('Valid Location IDs the player can move to'),
   /** Instructions for the DM to re-use globalMaterials or reference past emotional states. */
   callbacks: z.array(z.string()).optional(),
-  /** Conditions that dictate which node to transition to next. */
-  exitConditions: z.array(z.object({
-    condition: z.string().describe('Player action or state required to take this exit'),
-    nextNodeId: z.string().optional().describe('The ID of the next Node to transition to. If omitted, the game ends.'),
-  })).min(1),
   /** Key into AssetPack.music for this node's ambient track. */
   mood: z.string(),
 });
 
 /**
- * An overarching phase of the story containing a web of nodes.
+ * An overarching phase of the story containing a sandbox of locations and inevitable events.
  */
 export const ActSchema = z.object({
   id: z.string(),
   title: z.string(),
   objective: z.string().describe('The core objective the player is trying to achieve in this Act'),
-  nodes: z.array(NodeDefinitionSchema).min(1),
+  scenarioContext: z.string().describe('The hidden truth for this act. What is actually going on behind the scenes.'),
+  narrativeGuidelines: z.string().describe('Stylistic rules for this specific act (e.g., "Keep it a mundane mystery for now, don\'t spoil the monsters yet")'),
+  scenarioWorldInfo: z.array(WorldInfoSchema).optional().describe('World info specific to this Act'),
+  sandboxLocations: z.array(LocationSchema).min(1).describe('Locations the player can explore in this Act'),
+  inevitableEvents: z.array(InevitableEventSchema).optional().describe('Predetermined events that push the plot forward'),
 });
 
 /**
@@ -89,26 +122,27 @@ export const VNPackageSchema = z.object({
   genre: z.string(),
   artStyle: z.string(),
   language: z.string().default('en').describe('BCP-47 language tag for all story content, e.g. "en", "zh-CN"'),
-  setting: z.object({
-    world: z.string(),
-    era: z.string(),
-    tone: z.string(),
-  }),
-  /** All characters in the story. Must have at least one. */
-  characters: z.array(CharacterSchema).min(1),
   plot: z.object({
     premise: z.string(),
     themes: z.array(z.string()),
+    globalContext: z.object({
+      setting: z.string(),
+      tone: z.string(),
+      overarchingTruths: z.array(z.string()),
+    }),
     /** Reusable narrative anchors (NPC encounters, traits, motifs, objects). */
     globalMaterials: z.array(z.string()).optional(),
-    /** Acts containing a Directed Acyclic Graph of narrative nodes. Must have at least one Act. */
+    globalWorldInfo: z.array(WorldInfoSchema).optional().describe('World info that applies across all acts'),
+    /** Acts containing the sandbox and inevitable events. Must have at least one Act. */
     acts: z.array(ActSchema).min(1),
     /** Possible endings the story can reach based on player choices. */
     possibleEndings: z.array(z.string()).min(1),
   }),
+  /** All characters in the story. Must have at least one. */
+  characters: z.array(CharacterSchema).min(1),
   assets: AssetPackSchema,
   meta: z.object({
-    totalNodes: z.number(),
+    totalNodes: z.number().optional(), // Keeping for backward compatibility temporarily
     estimatedDuration: z.string(),
     generationMs: z.number(),
   }),
@@ -117,8 +151,10 @@ export const VNPackageSchema = z.object({
 export type AssetRef = z.infer<typeof AssetRefSchema>;
 export type AssetPack = z.infer<typeof AssetPackSchema>;
 export type Character = z.infer<typeof CharacterSchema>;
+export type WorldInfo = z.infer<typeof WorldInfoSchema>;
 export type Beat = z.infer<typeof BeatSchema>;
-export type NodeDefinition = z.infer<typeof NodeDefinitionSchema>;
+export type InevitableEvent = z.infer<typeof InevitableEventSchema>;
+export type Location = z.infer<typeof LocationSchema>;
 export type Act = z.infer<typeof ActSchema>;
 export type VNPackage = z.infer<typeof VNPackageSchema>;
 
@@ -132,10 +168,10 @@ export interface PlotState {
   sessionId: string;
   packageId: string;
   currentActId: string;
-  currentNodeId: string;
+  currentLocationId: string;
   currentBeat: number;
   offPathTurns: number;
-  completedNodes: string[];
+  completedLocations: string[];
   flags: Record<string, unknown>;
   updatedAt: string;
 }

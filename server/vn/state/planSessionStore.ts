@@ -4,10 +4,11 @@ export interface PlanDraftPremise {
   title: string;
   artStyle: string;
   language: string;
-  setting: { world: string; era: string; tone: string };
+  globalContext: { setting: string; tone: string; overarchingTruths: string[] };
   premise: string;
   themes: string[];
   globalMaterials: string[];
+  globalWorldInfo?: { id: string; keys: string[]; content: string; type: 'lore' | 'entity' | 'atmosphere' }[];
   possibleEndings: string[];
 }
 
@@ -22,13 +23,13 @@ export interface PlanDraftCharacter {
 }
 
 export interface PlanDraftBeat {
+  id?: string;
   description: string;
-  pacing: string;
+  pacing: { expectedFrames: number; focus: 'dialogue_and_worldbuilding' | 'standard' | 'tension_and_action' };
   findings?: string[];
   interactables?: string[];
+  potentialFlags?: string[];
   foreshadowing?: string;
-  objective?: string;
-  nextBeatIfFailed?: string;
 }
 
 export interface PlanDraftNode {
@@ -36,9 +37,10 @@ export interface PlanDraftNode {
   title: string;
   location: string;
   requiredCharacters: string[];
+  ambientDetail?: string;
   beats: PlanDraftBeat[];
   callbacks?: string[];
-  exitConditions: { condition: string; nextNodeId?: string }[];
+  connections: string[];
   mood: string;
   backgroundUrl?: string;
   backgroundMimeType?: string;
@@ -49,6 +51,17 @@ export interface PlanDraftAct {
   id: string;
   title: string;
   objective: string;
+  scenarioContext?: string;
+  narrativeGuidelines?: string;
+  inevitableEvents?: {
+    id: string;
+    title: string;
+    triggerCondition: string;
+    description: string;
+    forcesClimax?: boolean;
+    conditionalBranches?: { condition: string; effect: string }[];
+  }[];
+  scenarioWorldInfo?: { id: string; keys: string[]; content: string; type: 'lore' | 'entity' | 'atmosphere' }[];
   nodes: PlanDraftNode[];
 }
 

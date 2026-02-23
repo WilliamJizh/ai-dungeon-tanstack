@@ -10,28 +10,28 @@ Collaborative visual novel co-author. Works with users through conversation to d
 
 ## Architecture: 4-Step Generation Pipeline
 
-Creating a deeply branching network of Nodes in a single shot is impossible for an LLM. The Planner enforces a strict pipeline that builds the story incrementally:
+Creating a rich sandbox in a single shot is impossible for an LLM. The Planner enforces a strict pipeline that builds the story incrementally:
 
 ```mermaid
 graph LR
-    A["Step 1<br/>draftActOutline<br/>(The Skeleton)"] --> B["Step 2<br/>draftNodeWeb<br/>(The Connections)"]
-    B --> C["Step 3<br/>draftNodeBeats<br/>(The Meat)"]
+    A["Step 1<br/>draftActOutline<br/>(The Skeleton & Truths)"] --> B["Step 2<br/>draftNodeWeb<br/>(The Sandbox Map)"]
+    B --> C["Step 3<br/>draftNodeBeats<br/>(The Pacing & Flags)"]
     C --> D["Step 4<br/>finalizeNode<br/>(Assets + Polish)"]
     D --> E["finalizePackage<br/>(Save)"]
 ```
 
 | Step | Tool | What it does |
 |------|------|-------------|
-| **1. Skeleton** | `draftActOutline` | Proposes the Act's objective and registers empty Node slugs |
-| **2. Connections** | `draftNodeWeb` | Wires Nodes into a directed graph with `exitConditions` — must include fail-forward routes |
-| **3. Meat** | `draftNodeBeats` | Populates each Node with ordered narrative beats, findings, interactables, pacing |
-| **4. Assets** | `finalizeNode` | Generates background image + ambient music for each Node |
+| **1. Skeleton** | `draftActOutline` | Proposes the Act's objective, scenario context, inevitable events, and placeholder sandbox locations |
+| **2. Sandbox Map** | `draftNodeWeb` | Wires Locations into a spatial sandbox with `connections` |
+| **3. Pacing & Flags** | `draftNodeBeats` | Populates each Location with ordered narrative beats, pacing rules, findings, interactables, and potential status flags |
+| **4. Assets** | `finalizeNode` | Generates background image + ambient music for each Location |
 
 ### Why This Order Matters
-- **Step 1 before 2:** Can't wire connections between Nodes that don't exist yet
-- **Step 2 before 3:** Beats need to know the Node's role in the network (is it a consequence? a climax?)
-- **Step 3 before 4:** Asset prompts should reflect the narrative content of the Node
-- **Constraint:** `draftNodeWeb` MUST route failures to Consequence Nodes, never to "Game Over"
+- **Step 1 before 2:** Can't wire connections between Locations that don't exist yet
+- **Step 2 before 3:** Beats need to know the Location's role in the sandbox
+- **Step 3 before 4:** Asset prompts should reflect the narrative content of the Location
+- **Constraint:** `draftNodeBeats` MUST assign specific Semantic Flags for the player to discover.
 
 ---
 
@@ -62,10 +62,11 @@ ALL generated content MUST be in this language only. No mixing.
 ```
 
 ### Structural Design (TRPG & AVG Fusion)
-- **Node-Based Design:** Nodes represent locations/events with Three Clue Rule (≥3 clues pointing to next node(s))
-- **Onion Layer Branching:** Tactical branches for how players solve the mystery
-- **Broad Endings:** 3-4 ending categories, not a single scripted climax
-- **Networked Routing:** All Nodes within an Act connect via `exitConditions` — failure routes to Consequence Nodes
+- **Four Act Structure:** Setup, Rising Action, Climax, Resolution
+- **Sandbox Locations:** Players explore interconnected Locations filled with clues and interactions
+- **Inevitable Events:** Predetermined events acting as boundaries or plot escalations
+- **Hidden Contexts:** DM-only truths to color narration
+- **Semantic Flags:** Used instead of fuzzy action logging for reliable conditional branching
 
 ### Prose Voice Rules
 - **Show, don't tell** — physical reactions/environment, never state emotions directly
@@ -158,56 +159,53 @@ Proposes the Act skeleton: objective + placeholder Node slugs.
 
 ### `draftNodeWeb` — Pipeline Step 2
 
-Wires the Nodes into a directed graph with exit conditions.
+Wires the Locations into a spatial sandbox map.
 
 **Input:**
 ```typescript
 {
   actId: string
-  nodes: [{
-    id: string                        // Must match intendedNodes from Step 1
+  locations: [{
+    id: string                        // Must match intendedLocations from Step 1
     title: string
-    location: string                  // Asset key for background (= node id)
+    location: string                  // Asset key for background (= location id)
     requiredCharacters: string[]      // Character IDs that appear
+    ambientDetail: string             // Sensory details
     mood: string                      // Asset key for music
     callbacks?: string[]              // Instructions for DM to re-use globalMaterials
-    exitConditions: [{
-      condition: string               // "Player sneaks past guards"
-      nextNodeId?: string             // Target Node. Omit only for absolute final Act ending.
-    }]                                // Min 1 exit condition per node
+    connections: string[]             // Valid Location IDs player can move to
   }]
 }
 ```
 
-**Returns:** `{ ok: true, actId, nodeCount }`
-
-> [!IMPORTANT]
-> **Fail-forward constraint:** Every `exitCondition` representing failure MUST route to a Consequence Node, not game-over. The system prompt instructs the LLM to reject dead-end topologies.
+**Returns:** `{ ok: true, updatedLocations: number }`
 
 ---
 
 ### `draftNodeBeats` — Pipeline Step 3
 
-Populates a single Node with ordered narrative beats.
+Populates a single Location with ordered narrative beats.
 
 **Input:**
 ```typescript
 {
   actId: string
-  nodeId: string
+  nodeId: string                      // Still called nodeId for legacy compat
   beats: [{
     description: string               // Core narrative action of this beat
-    pacing: string                    // DM instructions: "5-8 frames of rapid dialogue"
+    pacing: {
+      expectedFrames: number
+      focus: 'dialogue_and_worldbuilding' | 'standard' | 'tension_and_action'
+    }
     findings?: string[]               // Clues uncovered in this beat
     interactables?: string[]          // Discoverable items in this beat
+    potentialFlags?: string[]         // Semantic state flags the player could earn
     foreshadowing?: string            // Subtle hints for future beats
-    objective?: string                // What player must accomplish
-    nextBeatIfFailed?: string         // Early branch if player fails (fail-forward within Node)
   }]                                  // Min 1 beat
 }
 ```
 
-**Returns:** `{ ok: true, actId, nodeId, beatCount }`
+**Returns:** `{ ok: true, updated: string, beatCount: number }`
 
 **Key design:** Because the LLM isn't worrying about Act-level topology (that was Step 2), it can focus purely on Steins;Gate-style subjective pacing and dialogue.
 
@@ -289,9 +287,8 @@ PlanDraft {
   acts: [{
     id, title, objective,
     nodes: [{
-      id, title, location, requiredCharacters, mood,
-      callbacks?, beats?,
-      exitConditions: [{ condition, nextNodeId? }],
+      id, title, location, requiredCharacters, ambientDetail, mood,
+      callbacks?, beats?, connections?,
       backgroundUrl?, musicUrl?
     }]
   }]

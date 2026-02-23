@@ -8,22 +8,21 @@ Dungeon Master for visual novel gameplay. Generates narrative frames per turn ba
 
 ---
 
-## Architecture: Networked Act-Node-Beat Hierarchy
+## Architecture: Sandbox and Inevitability Architecture
 
-The narrative is structured as a directed graph that **prevents dead ends**. Failure is never game-over — it routes to Consequence Nodes.
+The narrative is structured as an open sandbox bounded by inevitable story milestones.
 
 ```mermaid
 graph TD
-    subgraph "Act: Infiltrate SERN"
-        Start[Node: Loading Dock] -->|Sneak in| Stealth[Node: Server Room]
-        Start -->|Caught by patrol| Captured[Node: Interrogation Room]
-        Stealth -->|Hack success| Vault[Node: Sub-Basement Vault]
-        Stealth -->|Trigger alarm| Chase[Node: Hallway Chase]
-        Captured -->|Talk your way out| Chase
-        Captured -->|Attack guard| Escape[Node: Ventilation Shafts]
-        Chase -->|Elude guards| Vault
-        Chase -->|Cornered| Combat[Node: Rooftop Standoff]
-        Escape -->|Drop down| Vault
+    subgraph "Act 1: The Setup"
+        Global[Global Context & Truths] -.-> DM((Storyteller DM))
+        ActContext[Act Scenario Context] -.-> DM
+        
+        LocA[Sandbox Location: Mansion Foyer] <--> LocB[Sandbox Location: Library]
+        LocA <--> LocC[Sandbox Location: Gardens]
+        
+        DM -.->|Player Action| Flags[Semantic Flags]
+        Flags -->|Trigger| Event[Inevitable Event: The Murder]
     end
 ```
 
@@ -31,18 +30,18 @@ graph TD
 
 | Concept | Definition |
 |---------|-----------|
-| **Act** | Overarching story phase with a core objective (e.g., "Infiltrate SERN"). Contains a network of Nodes. |
-| **Node** | A key location, encounter, or moment (e.g., "The Server Room"). Contains ordered Beats and `exitConditions` that route to other Nodes. |
-| **Beat** | Micro-pacing within a Node — a narrative moment, clue reveal, or dialogue. The DM advances through beats sequentially. |
-| **Consequence Node** | A Node reached through failure. Never a dead end — always provides paths forward. |
-| **exitConditions** | Conditions that trigger transition to another Node (success OR failure). Every exit routes to a valid Node, never to "Game Over". |
+| **Act** | Overarching story phase with a hidden `scenarioContext`, `narrativeGuidelines`, and an `objective`. |
+| **Location** | A place in the sandbox containing sensory `ambientDetail`, ordered `beats`, and `connections` to traverse. |
+| **Beat** | Micro-pacing within a Location — a narrative moment, clue reveal, or dialogue. The DM advances through beats sequentially, following `pacing.focus`. |
+| **Semantic Flags** | Explicitly recorded boolean/value markers (e.g., `found_revolver=true`) triggered by meaningful player actions. |
+| **Inevitable Events** | Predetermined plot milestones that trigger when certain conditions/flags are met, pushing the story forward or bounding the Act. |
 
-### Fail-Forward Routing
+### Context Injection & Flags
 
 The DM **MUST** follow these rules:
-1. **No game-over states.** A PbtA miss (≤6) or bad choice routes to a Consequence Node, not termination.
-2. **All paths converge.** Even messy paths (chase → standoff) eventually give the player a chance to reach the Act's objective.
-3. **Complications, not punishment.** Failed rolls introduce severe complications (captured, injured, betrayed) — but the story continues.
+1. **Always-On Context.** The system unconditionally injects the `globalContext.overarchingTruths` and the `currentAct.scenarioContext` into the prompt. Use these hidden truths to color your narration subjectively.
+2. **Regex World Info.** As the player explores, keywords trigger dynamic `WorldInfo` (lore, entities) injected via `plotStateTool`. Follow these lore drops naturally.
+3. **Semantic Flags > Fuzzy Logging.** Instead of vaguely recording actions, explicitly call `recordPlayerActionTool` whenever the player's choices map to `potentialFlags` provided by `plotStateTool`. These flags drive conditional branches and inevitable events.
 
 ---
 
@@ -103,9 +102,8 @@ All generated text — dialogue, narration, character speech, skill check descri
    - ≤6 MUST route to a Consequence Node via nodeCompleteTool, never game-over.
 
 4. Node Transitions:
-   - When exitConditions are met → narrate the transition → nodeCompleteTool
-   - On failure: route to the Consequence Node defined by exitConditions
-   - On success: route to the next Node in the Act's network
+   - When connections are taken → narrate the transition → nodeCompleteTool
+   - On success: route to the next Location in the Act's spatial sandbox.
 
 5. Turn Endings — choose ONE yield mode:
    - yieldToPlayer('choice')     — genuine branching decision
@@ -196,34 +194,47 @@ Before passing messages to the agent:
 
 ---
 
-## Tools (7 session-bound)
+## Tools (8 session-bound)
 
 Tools are pre-bound with `sessionId` via `bindSessionTools(sessionId)`.
 
+### `recordPlayerActionTool`
+
+Explicitly record significant player choices or outcomes as state flags. Call when a player interacts with something matching a `potentialFlag`.
+
+**Input:**
+```typescript
+{
+  flagName: string                  // Semantic key (e.g., "found_revolver")
+  value: boolean | string | number  // Usually boolean
+}
+```
+
+**Returns:** `{ success: true, message: string }`
+
+**Source:** `server/vn/tools/recordPlayerActionTool.ts`
+
+---
+
 ### `plotStateTool`
 
-Read current narrative position. **Call at start of every turn.**
+Read current narrative position, actively triggered world info, and state flags. **Call at start of every turn.**
 
 **Returns:**
 ```typescript
 {
   currentActId: string | null
-  currentActTitle: string | null
-  currentActObjective: string | null    // The Act's overarching goal
-  currentNodeId: string | null
-  currentNodeTitle: string | null
-  currentBeat: number
-  nextBeat: string | null               // beats[currentBeat]
-  beatsCompleted: string[]
-  remainingBeats: string[]
-  interactables: string[]
-  findings: string[]                    // Clues and target nodes
-  callbacks: string[]
-  exitConditions: string[]              // What triggers Node exit (success or failure routes)
-  offPathTurns: number
-  completedNodes: string[]
-  flags: Record<string, unknown>
-  nudge?: string                        // Gentle steer if off-path >= 3 turns
+  actObjective: string | null
+  currentLocationId: string | null
+  currentLocationTitle: string | null
+  ambientDetail: string | null
+  currentBeatDescription: string | null
+  pacingFocus: string                   // e.g. 'dialogue_and_worldbuilding'
+  potentialFlags: string[]              // Flags player could earn here
+  triggeredWorldInfo: { type, content }[] // Lore injected via regex matching
+  activeFlags: Record<string, unknown>  // Earned flags
+  availableConnections: string[]        // Valid Location IDs to travel to
+  pendingInevitableEvents: { id, title, triggerCondition }[]
 }
 ```
 
@@ -260,13 +271,13 @@ Key fields:
 
 ### `nodeCompleteTool`
 
-Mark current Node as complete and transition to next Node or Act. **Call when exit conditions are met.**
+Mark current Location as complete and transition to next Location or Act. **Call when exit connections are taken.**
 
 **Input:**
 ```typescript
 {
-  completedNodeId?: string          // Defaults to current
-  nextNodeId?: string               // Target Node (from exitConditions)
+  completedLocationId?: string      // Defaults to current
+  nextLocationId?: string           // Target Location
   nextActId?: string                // If transitioning to new Act
 }
 ```
@@ -275,17 +286,17 @@ Mark current Node as complete and transition to next Node or Act. **Call when ex
 ```typescript
 {
   ok: true
-  completedNodeId: string
-  nextNodeId: string | null         // null = Act/game complete
+  completedLocationId: string
+  nextLocationId: string | null     // null = Act/game complete
   nextActId: string | null
   isGameComplete: boolean
 }
 ```
 
 **Behavior:**
-- Updates `plotStates`: appends completed Node, resets `currentBeat=0`, `offPathTurns=0`
-- Triggers background summarization of the completed Node
-- Auto-resolves next Node if not provided (walks act.nodes[])
+- Updates `plotStates`: appends completed Location, resets `currentBeat=0`, `offPathTurns=0`
+- Triggers background summarization of the completed Location
+- Auto-resolves next Location if not provided (walks act.sandboxLocations[])
 
 **Source:** `server/vn/tools/nodeCompleteTool.ts`
 

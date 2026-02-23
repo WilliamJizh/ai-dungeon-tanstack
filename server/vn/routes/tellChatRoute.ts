@@ -5,8 +5,8 @@ import { plotStates, vnPackages } from '../../db/schema.js';
 import { eq } from 'drizzle-orm';
 import { createStorytellerAgent } from '../agents/storytellerChatAgent.js';
 import { vnPackageStore } from '../state/vnPackageStore.js';
-import { startLLMTrace, MODEL_IDS } from '../../lib/modelFactory.js';
-import { compressContext, summarizeNodeInBackground } from '../utils/contextCompressor.js';
+import { startLLMTrace, getActiveModelInfo } from '../../lib/modelFactory.js';
+import { compressContext, summarizeNodeInBackground, sanitizeHistory } from '../utils/contextCompressor.js';
 import type { VNPackage } from '../types/vnTypes.js';
 
 async function loadVNPackage(packageId: string): Promise<VNPackage | null> {
@@ -28,23 +28,23 @@ function initPlotStateIfNeeded(sessionId: string, packageId: string, vnPackage: 
     .get();
   if (existing) return;
 
-  if (!vnPackage.plot.acts || vnPackage.plot.acts.length === 0 || vnPackage.plot.acts[0].nodes.length === 0) {
+  if (!vnPackage.plot.acts || vnPackage.plot.acts.length === 0 || !vnPackage.plot.acts[0].sandboxLocations || vnPackage.plot.acts[0].sandboxLocations.length === 0) {
     // Original instruction had `return c.json(...)`, adapting to current function context
     // This function is void, so just return.
     return;
   }
 
-  const firstNode = vnPackage.plot.acts[0].nodes[0];
+  const firstLocation = vnPackage.plot.acts[0].sandboxLocations[0];
 
   // Initialize fresh playback state
   db.insert(plotStates).values({
     sessionId,
     packageId: packageId,
-    currentNodeId: firstNode.id,
+    currentLocationId: firstLocation.id,
     currentActId: vnPackage.plot.acts[0].id,
     currentBeat: 0,
     offPathTurns: 0,
-    completedNodes: '[]',
+    completedLocations: '[]',
     playerStatsJson: '{}', // starting inventory/skills
     flagsJson: '{}',       // starting flags
     updatedAt: new Date().toISOString()
@@ -81,18 +81,20 @@ export async function tellChatRoute(app: FastifyInstance) {
 
     initPlotStateIfNeeded(sessionId, packageId, vnPackage);
 
-    // Get the current node ID and story summary before the AI acts
-    const preTurnState = db.select({ currentNodeId: plotStates.currentNodeId, storySummary: plotStates.storySummary }).from(plotStates).where(eq(plotStates.sessionId, sessionId)).get();
+    // Get the current location ID and story summary before the AI acts
+    const preTurnState = db.select({ currentLocationId: plotStates.currentLocationId, storySummary: plotStates.storySummary }).from(plotStates).where(eq(plotStates.sessionId, sessionId)).get();
 
     // Compress the context array before giving it to the LLM
     // (summarize-then-cut if messages exceed HIGH_WATER threshold)
-    const compressedMessages = await compressContext(uiMessages as any[], sessionId, preTurnState?.storySummary || '');
+    const uiMessagesToProcess = sanitizeHistory(uiMessages as any[]);
+    const compressedMessages = await compressContext(uiMessagesToProcess, sessionId, preTurnState?.storySummary || '');
 
     const agent = createStorytellerAgent(vnPackage, sessionId);
+    const { provider, modelId } = getActiveModelInfo('storyteller');
     const { traceId, onStepFinish, finishTrace } = startLLMTrace({
       sessionId, requestId: req.id,
       pipeline: 'vn-tell-chat', agentId: 'storyteller-chat-agent',
-      modelProvider: 'google', modelId: MODEL_IDS.storyteller,
+      modelProvider: provider, modelId: modelId,
       tags: ['agent', 'storyteller'], source: 'tellChatRoute',
     }, { pipeline: 'vn-tell-chat', sessionId });
 
@@ -130,11 +132,11 @@ export async function tellChatRoute(app: FastifyInstance) {
       .then(() => {
         finishTrace('success');
 
-        // After the stream finishes, check if the node changed during this turn
+        // After the stream finishes, check if the location changed during this turn
         if (preTurnState) {
-          const postTurnState = db.select({ currentNodeId: plotStates.currentNodeId }).from(plotStates).where(eq(plotStates.sessionId, sessionId)).get();
-          if (postTurnState && postTurnState.currentNodeId !== preTurnState.currentNodeId) {
-            req.log.info({ sessionId, from: preTurnState.currentNodeId, to: postTurnState.currentNodeId }, '[VN tell/chat] Node transitioned. Kicking off background summarizer.');
+          const postTurnState = db.select({ currentLocationId: plotStates.currentLocationId }).from(plotStates).where(eq(plotStates.sessionId, sessionId)).get();
+          if (postTurnState && postTurnState.currentLocationId !== preTurnState.currentLocationId) {
+            req.log.info({ sessionId, from: preTurnState.currentLocationId, to: postTurnState.currentLocationId }, '[VN tell/chat] Location transitioned. Kicking off background summarizer.');
             // Fire and forget the summariser
             summarizeNodeInBackground(sessionId, uiMessages as any[], preTurnState.storySummary);
           }

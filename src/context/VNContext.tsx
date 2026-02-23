@@ -5,15 +5,15 @@ interface VNState {
   isHydrated: boolean;
   sessionId: string;
   vnPackage: VNPackage | null;
-  currentNodeId: string | null;
-  completedNodes: string[];
+  currentLocationId: string | null;
+  completedLocations: string[];
 }
 
 type VNAction =
   | { type: 'SET_PACKAGE'; payload: VNPackage }
-  | { type: 'SET_NODE'; payload: string }
-  | { type: 'ADVANCE_NODE'; payload: string }
-  | { type: 'COMPLETE_NODE'; payload: string }
+  | { type: 'SET_LOCATION'; payload: string }
+  | { type: 'ADVANCE_LOCATION'; payload: string }
+  | { type: 'COMPLETE_LOCATION'; payload: string }
   | { type: 'RESET' };
 
 const VN_SESSION_KEY = 'vn-session-id';
@@ -21,8 +21,8 @@ const VN_STATE_KEY = 'vn-state-v1';
 
 interface PersistedVNState {
   vnPackage: VNPackage | null;
-  currentNodeId: string | null;
-  completedNodes: string[];
+  currentLocationId: string | null;
+  completedLocations: string[];
 }
 
 function devLog(message: string, data?: unknown) {
@@ -65,29 +65,34 @@ function isLikelyVNPackage(value: unknown): value is VNPackage {
   return true;
 }
 
-function normalizeNodePointer(
+function normalizeLocationPointer(
   pkg: VNPackage,
-  nodeId: string | null,
+  locationId: string | null,
 ): string | null {
-  const firstNode = pkg.plot.nodes[0];
+  const acts = pkg.plot.acts;
+  if (!acts || acts.length === 0) return null;
 
-  if (!firstNode) {
-    return null;
+  const firstAct = acts[0];
+  if (!firstAct || !firstAct.sandboxLocations || firstAct.sandboxLocations.length === 0) return null;
+
+  const firstLocation = firstAct.sandboxLocations[0];
+
+  if (!locationId) {
+    return firstLocation.id;
   }
 
-  if (!nodeId) {
-    return firstNode.id;
+  // Deep search across all acts
+  for (const act of acts) {
+    if (act.sandboxLocations) {
+      const match = act.sandboxLocations.find((l: any) => l.id === locationId);
+      if (match) return locationId;
+    }
   }
 
-  const matchNode = pkg.plot.nodes.find((n: any) => n.id === nodeId);
-  if (!matchNode) {
-    return firstNode.id;
-  }
-
-  return nodeId;
+  return firstLocation.id;
 }
 
-function sanitizeCompletedNodes(input: unknown): string[] {
+function sanitizeCompletedLocations(input: unknown): string[] {
   if (!Array.isArray(input)) return [];
   return input.filter((v): v is string => typeof v === 'string');
 }
@@ -99,8 +104,8 @@ function loadInitialState(): VNState {
     isHydrated: true,
     sessionId,
     vnPackage: null,
-    currentNodeId: null,
-    completedNodes: [],
+    currentLocationId: null,
+    completedLocations: [],
   };
 
   if (!storage) {
@@ -123,18 +128,18 @@ function loadInitialState(): VNState {
       return baseState;
     }
 
-    const pointer = normalizeNodePointer(pkg, parsed.currentNodeId);
+    const pointer = normalizeLocationPointer(pkg, parsed.currentLocationId);
     const hydratedState: VNState = {
       ...baseState,
       vnPackage: pkg,
-      currentNodeId: pointer,
-      completedNodes: sanitizeCompletedNodes(parsed.completedNodes),
+      currentLocationId: pointer,
+      completedLocations: sanitizeCompletedLocations(parsed.completedLocations),
     };
 
     devLog('Hydrated VN state', {
       packageId: hydratedState.vnPackage?.id,
-      currentNodeId: hydratedState.currentNodeId,
-      completedNodes: hydratedState.completedNodes.length,
+      currentLocationId: hydratedState.currentLocationId,
+      completedLocations: hydratedState.completedLocations.length,
     });
     return hydratedState;
   } catch (err) {
@@ -148,40 +153,42 @@ function vnReducer(state: VNState, action: VNAction): VNState {
   switch (action.type) {
     case 'SET_PACKAGE': {
       const pkg = action.payload;
-      const firstNode = pkg.plot.nodes[0];
+      const acts = pkg.plot.acts;
+      const firstAct = acts ? acts[0] : null;
+      const firstLocation = firstAct?.sandboxLocations?.[0];
       return {
         ...state,
         vnPackage: pkg,
-        currentNodeId: firstNode?.id ?? null,
-        completedNodes: [],
+        currentLocationId: firstLocation?.id ?? null,
+        completedLocations: [],
       };
     }
-    case 'SET_NODE':
+    case 'SET_LOCATION':
       return {
         ...state,
-        currentNodeId: action.payload,
+        currentLocationId: action.payload,
       };
-    case 'ADVANCE_NODE': {
-      const nextNodeId = action.payload;
+    case 'ADVANCE_LOCATION': {
+      const nextLocationId = action.payload;
       return {
         ...state,
-        currentNodeId: nextNodeId,
-        completedNodes: state.currentNodeId
-          ? [...state.completedNodes, state.currentNodeId]
-          : state.completedNodes,
+        currentLocationId: nextLocationId,
+        completedLocations: state.currentLocationId
+          ? [...state.completedLocations, state.currentLocationId]
+          : state.completedLocations,
       };
     }
-    case 'COMPLETE_NODE':
+    case 'COMPLETE_LOCATION':
       return {
         ...state,
-        completedNodes: [...state.completedNodes, action.payload],
+        completedLocations: [...state.completedLocations, action.payload],
       };
     case 'RESET':
       return {
         ...state,
         vnPackage: null,
-        currentNodeId: null,
-        completedNodes: [],
+        currentLocationId: null,
+        completedLocations: [],
       };
     default:
       return state;
@@ -190,9 +197,9 @@ function vnReducer(state: VNState, action: VNAction): VNState {
 
 interface VNContextValue extends VNState {
   setPackage: (pkg: VNPackage) => void;
-  setNode: (nodeId: string) => void;
-  advanceNode: (nextNodeId: string) => void;
-  completeNode: (nodeId: string) => void;
+  setLocation: (locationId: string) => void;
+  advanceLocation: (nextLocationId: string) => void;
+  completeLocation: (locationId: string) => void;
   reset: () => void;
 }
 
@@ -206,22 +213,22 @@ export function VNProvider({ children }: { children: ReactNode }) {
     if (!storage) return;
     const snapshot: PersistedVNState = {
       vnPackage: state.vnPackage,
-      currentNodeId: state.currentNodeId,
-      completedNodes: state.completedNodes,
+      currentLocationId: state.currentLocationId,
+      completedLocations: state.completedLocations,
     };
     try {
       storage.setItem(VN_STATE_KEY, JSON.stringify(snapshot));
     } catch (err) {
       devLog('Failed to persist VN state snapshot', err);
     }
-  }, [state.vnPackage, state.currentNodeId, state.completedNodes]);
+  }, [state.vnPackage, state.currentLocationId, state.completedLocations]);
 
   const value: VNContextValue = {
     ...state,
     setPackage: (pkg) => dispatch({ type: 'SET_PACKAGE', payload: pkg }),
-    setNode: (nodeId) => dispatch({ type: 'SET_NODE', payload: nodeId }),
-    advanceNode: (nextNodeId) => dispatch({ type: 'ADVANCE_NODE', payload: nextNodeId }),
-    completeNode: (nodeId) => dispatch({ type: 'COMPLETE_NODE', payload: nodeId }),
+    setLocation: (locationId) => dispatch({ type: 'SET_LOCATION', payload: locationId }),
+    advanceLocation: (nextLocationId) => dispatch({ type: 'ADVANCE_LOCATION', payload: nextLocationId }),
+    completeLocation: (locationId) => dispatch({ type: 'COMPLETE_LOCATION', payload: locationId }),
     reset: () => {
       getStorage()?.removeItem(VN_STATE_KEY);
       dispatch({ type: 'RESET' });

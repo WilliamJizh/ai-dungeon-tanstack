@@ -21,6 +21,7 @@
     "@google/genai": "^1.0.0",
     "@google/generative-ai": "^0.21.0",
     "@imgly/background-removal-node": "^1.0.0",
+    "@openrouter/ai-sdk-provider": "^2.2.3",
     "@react-three/drei": "^9.122.0",
     "@react-three/fiber": "^8.18.0",
     "@tailwindcss/vite": "^4.2.0",

@@ -90,6 +90,43 @@ function extractToolNames(step: TraceStep): string[] {
     .filter((name): name is string => typeof name === 'string');
 }
 
+interface UsageInfo {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+}
+
+function parseUsage(raw: unknown): UsageInfo | null {
+  if (typeof raw !== 'object' || raw === null) return null;
+  const obj = raw as Record<string, unknown>;
+  const prompt = typeof obj.inputTokens === 'number' ? obj.inputTokens : 0;
+  const completion = typeof obj.outputTokens === 'number' ? obj.outputTokens : 0;
+  const total = typeof obj.totalTokens === 'number' ? obj.totalTokens : prompt + completion;
+  if (prompt === 0 && completion === 0 && total === 0) return null;
+  return { promptTokens: prompt, completionTokens: completion, totalTokens: total };
+}
+
+function aggregateUsage(steps: TraceStep[]): UsageInfo | null {
+  let prompt = 0, completion = 0, total = 0, found = false;
+  for (const step of steps) {
+    const u = parseUsage(step.usage);
+    if (!u) continue;
+    found = true;
+    prompt += u.promptTokens;
+    completion += u.completionTokens;
+    total += u.totalTokens;
+  }
+  return found ? { promptTokens: prompt, completionTokens: completion, totalTokens: total } : null;
+}
+
+function fmtTokens(n: number): string {
+  return n.toLocaleString();
+}
+
+function fmtUsage(u: UsageInfo): string {
+  return `${fmtTokens(u.promptTokens)} in / ${fmtTokens(u.completionTokens)} out (${fmtTokens(u.totalTokens)})`;
+}
+
 function countMissingToolOutputs(step: TraceStep): number {
   let count = 0;
   for (const result of getArray(step.toolResults)) {
@@ -285,7 +322,10 @@ export function TraceDebugPage() {
                     </div>
                   )}
                   <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>{fmtDate(trace.createdAt)}</div>
-                  <div style={{ fontSize: 11, color: '#64748b' }}>duration: {fmtDuration(trace.durationMs)}</div>
+                  <div style={{ fontSize: 11, color: '#64748b' }}>
+                    duration: {fmtDuration(trace.durationMs)}
+                    {trace.meta && typeof (trace.meta as any).totalTokens === 'number' ? ` · tokens: ${fmtTokens((trace.meta as any).totalTokens)}` : ''}
+                  </div>
                   <div style={{ fontSize: 10, color: '#475569', marginTop: 4, wordBreak: 'break-all' }}>{trace.id}</div>
                 </button>
               );
@@ -302,6 +342,7 @@ export function TraceDebugPage() {
                   <InfoCard label="Status" value={selectedTrace.status} />
                   <InfoCard label="Duration" value={fmtDuration(selectedTrace.durationMs)} />
                   <InfoCard label="Steps" value={String(selectedTrace.steps.length)} />
+                  <InfoCard label="Tokens" value={(() => { const u = aggregateUsage(selectedTrace.steps); return u ? fmtUsage(u) : '-'; })()} />
                   <InfoCard label="Session" value={selectedTrace.sessionId ?? '-'} copyable />
                   <InfoCard label="Source" value={(selectedTrace as any).source ?? '-'} />
                   <InfoCard label="Pipeline" value={selectedTrace.pipeline} />
@@ -339,6 +380,7 @@ export function TraceDebugPage() {
                       </div>
                       <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 8 }}>
                         tools: {toolNames.length > 0 ? toolNames.join(', ') : 'none'} · missing tool outputs: {missingOutputs}
+                        {(() => { const u = parseUsage(step.usage); return u ? ` · ${fmtTokens(u.promptTokens)} in / ${fmtTokens(u.completionTokens)} out` : ''; })()}
                       </div>
                       <details style={detailsStyle}>
                         <summary>Tool Calls</summary>

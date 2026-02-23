@@ -112,6 +112,9 @@ export async function tracedGenerateText(input: any, context: AIDebugContext): P
       meta: {
         stepCount: steps.length,
         toolCallCount: stepRows.reduce((sum, step) => sum + (Array.isArray(step.toolCalls) ? step.toolCalls.length : 0), 0),
+        promptTokens: (result.totalUsage as any)?.inputTokens,
+        completionTokens: (result.totalUsage as any)?.outputTokens,
+        totalTokens: (result.totalUsage as any)?.totalTokens,
       },
     });
     return result;
@@ -168,6 +171,9 @@ export async function tracedGenerateObject(input: any, context: AIDebugContext):
       }),
       meta: {
         stepCount: 1,
+        promptTokens: (result.usage as any)?.inputTokens,
+        completionTokens: (result.usage as any)?.outputTokens,
+        totalTokens: (result.usage as any)?.totalTokens,
       },
     });
 

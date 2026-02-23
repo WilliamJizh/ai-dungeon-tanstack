@@ -24,14 +24,14 @@ export const vnPackages = sqliteTable('vn_packages', {
 export const plotStates = sqliteTable('plot_states', {
   sessionId: text('session_id').primaryKey(),
   packageId: text('package_id').notNull().references(() => vnPackages.id),
-  currentNodeId: text('current_node_id').notNull(),
+  currentLocationId: text('current_location_id').notNull(),
   currentActId: text('current_act_id').notNull(),
   /** Index of the current narrative beat within the current scene. */
   currentBeat: integer('current_beat').notNull().default(0),
   /** Consecutive turns where player ignored scene exit conditions. */
   offPathTurns: integer('off_path_turns').notNull().default(0),
-  /** JSON array of completed scene IDs. */
-  completedNodes: text('completed_nodes').notNull().default('[]'),
+  /** JSON array of completed location IDs. */
+  completedLocations: text('completed_locations').notNull().default('[]'),
   /** Condensed rolling summary of all past Nodes to prevent context window bloat. */
   storySummary: text('story_summary').notNull().default(''),
   /** JSON object of story flags set during gameplay. */

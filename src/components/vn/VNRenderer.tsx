@@ -4,12 +4,22 @@ import type { VNPackage } from '../../../server/vn/types/vnTypes';
 import { t } from '../../lib/i18n';
 import { useLocale } from '../../context/LocaleContext';
 
-function buildDefaultHud(pack: VNPackage, currentNodeId: string) {
-  const node = pack.plot.nodes.find((n) => n.id === currentNodeId);
-  if (node) {
+function buildDefaultHud(pack: VNPackage, currentLocationId: string) {
+  // Find which location we're in by scanning all acts
+  let location;
+  let act;
+  for (const a of pack.plot.acts || []) {
+    location = a.sandboxLocations?.find((l) => l.id === currentLocationId);
+    if (location) {
+      act = a;
+      break;
+    }
+  }
+
+  if (location && act) {
     return {
-      chapter: node.title.toUpperCase(),
-      scene: node.location.toUpperCase(),
+      chapter: act.title.toUpperCase(),
+      scene: location.title.toUpperCase(),
       showNav: true as const,
     };
   }
@@ -45,7 +55,7 @@ interface VNRendererProps {
   /** Called with choice ID or free-text string when player acts */
   onPlayerAction: (text: string) => void;
   pack: VNPackage;
-  currentNodeId: string;
+  currentLocationId: string;
   onNodeComplete: (nextNodeId: string) => void;
   isMuted?: boolean;
   onToggleMute?: () => void;
@@ -62,7 +72,7 @@ export function VNRenderer({
   isLoading,
   onPlayerAction,
   pack,
-  currentNodeId,
+  currentLocationId,
   onNodeComplete,
   isMuted,
   onToggleMute,
@@ -183,7 +193,7 @@ export function VNRenderer({
     );
   }
 
-  const defaultHud = buildDefaultHud(pack, currentNodeId);
+  const defaultHud = buildDefaultHud(pack, currentLocationId);
 
   const renderFrame = () => {
     // tactical-map needs closures over setCurrentIndex/frames.length — explicit branch

@@ -12,7 +12,22 @@ const MAX_ARRAY_LENGTH = 200;
 const MAX_OBJECT_KEYS = 200;
 const MAX_DEPTH = 8;
 
+const ALLOWED_TOKEN_KEYS = new Set([
+  'promptTokens',
+  'completionTokens',
+  'totalTokens',
+  'cachedTokens',
+  'tokens',
+  'inputTokens',
+  'outputTokens',
+  'inputTokenDetails',
+  'outputTokenDetails',
+  'reasoningTokens',
+  'cachedInputTokens',
+]);
+
 function shouldRedact(key: string): boolean {
+  if (ALLOWED_TOKEN_KEYS.has(key)) return false;
   return REDACT_PATTERNS.some((p) => p.test(key));
 }
 

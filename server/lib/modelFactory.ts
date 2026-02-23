@@ -1,4 +1,5 @@
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
+import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 
 /**
  * Central model ID registry. All env-var fallback chains live here.
@@ -6,14 +7,24 @@ import { createGoogleGenerativeAI } from '@ai-sdk/google';
  */
 export const MODEL_IDS = {
   chat: process.env.GEMINI_CHAT_MODEL ?? 'gemini-3.1-pro-preview',
-  storyteller: process.env.GEMINI_STORY_MODEL ?? process.env.GEMINI_TEXT_MODEL ?? 'gemini-3.1-pro-preview',
-  planning: process.env.GEMINI_PLANNING_MODEL ?? process.env.GEMINI_TEXT_MODEL ?? 'gemini-3.1-pro-preview',
+  storyteller: process.env.GEMINI_STORY_MODEL ?? process.env.GEMINI_TEXT_MODEL ?? 'gemini-3-pro-preview',
+  planning: process.env.GEMINI_PLANNING_MODEL ?? process.env.GEMINI_TEXT_MODEL ?? 'gemini-3-pro-preview',
   summarizer: process.env.GEMINI_SUMMARY_MODEL ?? 'gemini-3-flash-preview',
+} as const;
+
+export const OPENROUTER_MODEL_IDS = {
+  chat: process.env.OPENROUTER_CHAT_MODEL ?? 'anthropic/claude-3.5-sonnet',
+  storyteller: process.env.OPENROUTER_STORY_MODEL ?? 'anthropic/claude-3.5-sonnet',
+  planning: process.env.OPENROUTER_PLANNING_MODEL ?? 'anthropic/claude-3.5-sonnet',
+  summarizer: process.env.OPENROUTER_SUMMARY_MODEL ?? 'anthropic/claude-3.5-haiku',
 } as const;
 
 export type ModelRole = keyof typeof MODEL_IDS;
 
+const PROVIDER = process.env.AI_PROVIDER ?? 'google';
+
 let _googleClient: ReturnType<typeof createGoogleGenerativeAI> | null = null;
+let _openRouterClient: ReturnType<typeof createOpenRouter> | null = null;
 
 export function getGoogleClient(): ReturnType<typeof createGoogleGenerativeAI> {
   if (!_googleClient) {
@@ -22,6 +33,15 @@ export function getGoogleClient(): ReturnType<typeof createGoogleGenerativeAI> {
     _googleClient = createGoogleGenerativeAI({ apiKey });
   }
   return _googleClient;
+}
+
+export function getOpenRouterClient(): ReturnType<typeof createOpenRouter> {
+  if (!_openRouterClient) {
+    const apiKey = process.env.OPENROUTER_API_KEY;
+    if (!apiKey) throw new Error('OPENROUTER_API_KEY is not set');
+    _openRouterClient = createOpenRouter({ apiKey });
+  }
+  return _openRouterClient;
 }
 
 import { wrapLanguageModel } from 'ai';
@@ -78,10 +98,10 @@ export function startLLMTrace(
       })),
       toolResults: Array.isArray(step.toolResults)
         ? step.toolResults.map((r: any) => ({
-            toolCallId: r.toolCallId,
-            toolName: r.toolName,
-            output: r.output,
-          }))
+          toolCallId: r.toolCallId,
+          toolName: r.toolName,
+          output: r.output,
+        }))
         : undefined,
       content: step.text ?? '',
     });
@@ -112,6 +132,32 @@ export function startLLMTrace(
 }
 
 /**
+ * Returns the currently active provider and model id for a given role.
+ */
+export function getActiveModelInfo(role: ModelRole): { provider: string, modelId: string } {
+  if (PROVIDER === 'openrouter') {
+    if (process.env.OPENROUTER_API_KEY) {
+      return { provider: 'openrouter', modelId: OPENROUTER_MODEL_IDS[role] };
+    }
+  }
+  return { provider: 'google', modelId: MODEL_IDS[role] };
+}
+
+/**
+ * Returns a configured language model for the given role based on the active provider.
+ * Fallbacks to Google if AI_PROVIDER is not openrouter or if OPENROUTER_API_KEY is missing.
+ */
+export function getModel(role: ModelRole) {
+  if (PROVIDER === 'openrouter') {
+    // Only attempt OpenRouter if a key is explicitly set
+    if (process.env.OPENROUTER_API_KEY) {
+      return getOpenRouterModel(role);
+    }
+  }
+  return getGoogleModel(role);
+}
+
+/**
  * Returns a Google Generative AI language model for the given role.
  * Reuses a single google client across the process.
  */
@@ -132,28 +178,121 @@ export function getGoogleModel(role: ModelRole) {
         };
       },
       wrapGenerate: async ({ doGenerate, params }: any) => {
-        const result = await doGenerate();
-        // Capture prompt + tools from the first LLM call only (same for every step in a turn)
-        if (_activeTrace && !_activeTrace.initialPrompt) {
-          try {
-            let toolSummary: Record<string, any> | undefined;
-            if (params.tools) {
-              toolSummary = {};
-              for (const [name, t] of Object.entries(params.tools ?? {})) {
-                const tool = t as any;
-                toolSummary[name] = {
-                  type: tool.type,
-                  description: tool.description,
-                  parameters: tool.parameters,
-                };
-              }
-            }
-            _activeTrace.initialPrompt = { prompt: params.prompt, tools: toolSummary };
-          } catch (err) {
-            console.error('[Trace] Failed to capture initial prompt:', err);
+        const llmStart = Date.now();
+        const toolNames = params.tools ? Object.keys(params.tools).join(', ') : 'none';
+        console.log(`  [LLM Call] Starting... tools=[${toolNames}]`);
+        try {
+          const result = await doGenerate();
+          const llmMs = Date.now() - llmStart;
+          const reason = typeof result.finishReason === 'string' ? result.finishReason : JSON.stringify(result.finishReason);
+
+          let toolCallCount = 0;
+          if (Array.isArray(result.toolCalls)) toolCallCount = result.toolCalls.length;
+          // Some providers return tool calls inside message parts in V3
+          if (!toolCallCount && Array.isArray(result.message?.parts)) {
+            toolCallCount = result.message.parts.filter((p: any) => p.type === 'tool-call').length;
           }
+
+          const usageObj = result.usage;
+          const usageStr = usageObj ? `in=${(usageObj as any).inputTokens} out=${(usageObj as any).outputTokens}` : `usage=unknown`;
+
+          const textContent = result.text ?? '';
+          const textPreview = textContent.length > 300 ? textContent.substring(0, 300) + '...' : textContent;
+
+          console.log(`  [LLM Call] Done in ${llmMs}ms | reason=${reason} | toolCalls=${toolCallCount} | ${usageStr}`);
+          if (textPreview.trim()) {
+            console.log(`  [LLM Text] ${textPreview}`);
+          }
+
+          // Capture prompt + tools from the first LLM call only (same for every step in a turn)
+          if (_activeTrace && !_activeTrace.initialPrompt) {
+            try {
+              let toolSummary: Record<string, any> | undefined;
+              if (params.tools) {
+                toolSummary = {};
+                for (const [name, t] of Object.entries(params.tools ?? {})) {
+                  const tool = t as any;
+                  toolSummary[name] = {
+                    type: tool.type,
+                    description: tool.description,
+                    parameters: tool.parameters,
+                  };
+                }
+              }
+              _activeTrace.initialPrompt = { prompt: params.prompt, tools: toolSummary };
+            } catch (err) {
+              console.error('[Trace] Failed to capture initial prompt:', err);
+            }
+          }
+          return result;
+        } catch (err) {
+          const llmMs = Date.now() - llmStart;
+          console.error(`  [LLM Call] FAILED after ${llmMs}ms:`, err);
+          throw err;
         }
-        return result;
+      },
+    }
+  });
+}
+
+/**
+ * Returns an OpenRouter language model for the given role.
+ */
+export function getOpenRouterModel(role: ModelRole) {
+  const model = getOpenRouterClient()(OPENROUTER_MODEL_IDS[role], {
+    usage: { include: true }
+  });
+
+  // OpenRouter doesn't strictly need the Gemini message merging, 
+  // but we still wrap it to inject our centralized logging/tracing middleware.
+  return wrapLanguageModel({
+    model,
+    middleware: {
+      specificationVersion: 'v3',
+      wrapGenerate: async ({ doGenerate, params }: any) => {
+        const llmStart = Date.now();
+        const toolNames = params.tools ? Object.keys(params.tools).join(', ') : 'none';
+        console.log(`  [OpenRouter LLM Call] Starting... tools=[${toolNames}]`);
+        try {
+          const result = await doGenerate();
+          const llmMs = Date.now() - llmStart;
+          const reason = typeof result.finishReason === 'string' ? result.finishReason : JSON.stringify(result.finishReason);
+          const cachedStr = (result.usage as any)?.cachedTokens ? ` cached=${(result.usage as any).cachedTokens}` : '';
+          const usage = result.usage ? `in=${result.usage.promptTokens} out=${result.usage.completionTokens}${cachedStr}` : '';
+          const toolCallCount = result.toolCalls?.length ?? 0;
+
+          const textContent = result.text ?? '';
+          const textPreview = textContent.length > 300 ? textContent.substring(0, 300) + '...' : textContent;
+          console.log(`  [OpenRouter LLM Call] Done in ${llmMs}ms | reason=${reason} | toolCalls=${toolCallCount} | ${usage}`);
+          if (textPreview.trim()) {
+            console.log(`  [OpenRouter LLM Text] ${textPreview}`);
+          }
+
+          if (_activeTrace && !_activeTrace.initialPrompt) {
+            try {
+              let toolSummary: Record<string, any> | undefined;
+              if (params.tools) {
+                toolSummary = {};
+                for (const [name, t] of Object.entries(params.tools ?? {})) {
+                  const tool = t as any;
+                  toolSummary[name] = {
+                    type: tool.type,
+                    description: tool.description,
+                    parameters: tool.parameters,
+                  };
+                }
+              }
+              _activeTrace.initialPrompt = { prompt: params.prompt, tools: toolSummary };
+            } catch (err) {
+              console.error('[Trace] Failed to capture initial prompt:', err);
+            }
+          }
+          return result;
+        } catch (err) {
+          const llmMs = Date.now() - llmStart;
+          console.error(`  [OpenRouter LLM Call] FAILED after ${llmMs}ms:`, err);
+          throw err;
+        }
       },
     }
   });
@@ -178,6 +317,7 @@ function mergePromptRulesForGemini(prompt: any[]): any[] {
   if (!prompt || prompt.length === 0) return prompt;
 
   // ── Pass 1: merge consecutive same-role messages ──────────────────────
+  // Gemini does not allow consecutive messages of the same role (e.g. user -> user).
   const pass1: any[] = [];
   for (const msg of prompt) {
     if (msg.role === 'system') {
@@ -192,46 +332,10 @@ function mergePromptRulesForGemini(prompt: any[]): any[] {
     }
   }
 
-  // ── Pass 2: merge [tool] → [user] into one user message ─────────────
-  // Both roles map to Gemini "user", so consecutive [tool][user] causes
-  // INVALID_ARGUMENT. The old approach pushed user text INTO the tool msg,
-  // but the Google SDK crashes on non-tool-result parts in tool messages
-  // (it assumes every part has `.output`). Instead, we absorb tool results
-  // as text into the user message — safe for the SDK's user-role converter.
-  const pass2: any[] = [];
-  for (let i = 0; i < pass1.length; i++) {
-    const msg = pass1[i];
-    if (msg.role === 'user' && pass2.length > 0 && pass2[pass2.length - 1].role === 'tool') {
-      const toolMsg = pass2.pop()!;
-      // Convert tool-result parts to text summaries
-      const toolParts = toolMsg.content
-        .filter((p: any) => p?.type === 'tool-result')
-        .map((p: any) => {
-          const out = p.output;
-          const text = typeof out === 'string' ? out
-            : (out?.type === 'content' && Array.isArray(out.value))
-              ? out.value.map((v: any) => v.text ?? '').join('')
-              : JSON.stringify(out);
-          return { type: 'text' as const, text: `[${p.toolName} result]: ${text}` };
-        });
-      // Prepend tool results before user content in a single user message
-      pass2.push({ role: 'user', content: [...toolParts, ...msg.content] });
-    } else {
-      pass2.push(msg);
-    }
-  }
+  // NOTE: We intentionally DO NOT merge [tool] and [user] messages here.
+  // The @ai-sdk/google provider natively translates `tool` roles to `user` role + functionResponse.
+  // Converting tool-result parts to text parts manually breaks Gemini's strict sequence rule
+  // that a `functionCall` turn must be followed by a `functionResponse` turn.
 
-  // ── Pass 3: validate content parts ─────────────────────────────────
-  // Strip nulls and ensure tool messages only contain tool-result parts.
-  for (const msg of pass2) {
-    if (Array.isArray(msg.content)) {
-      msg.content = msg.content.filter((part: any) => {
-        if (part == null || part.type == null) return false;
-        if (msg.role === 'tool' && part.type !== 'tool-result' && part.type !== 'tool-approval-response') return false;
-        return true;
-      });
-    }
-  }
-
-  return pass2;
+  return pass1;
 }

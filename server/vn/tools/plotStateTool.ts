@@ -3,55 +3,89 @@ import { z } from 'zod';
 import { db } from '../../db/index.js';
 import { plotStates, vnPackages } from '../../db/schema.js';
 import { eq } from 'drizzle-orm';
-import type { VNPackage } from '../types/vnTypes.js';
+import type { VNPackage, Act, Location, WorldInfo } from '../types/vnTypes.js';
 
 /**
- * Reads the current narrative state for this session, including the scene
- * script context from the VNPackage so the storyteller can act as a faithful DM.
- * Call at the start of each turn before building any frames.
+ * Intelligent context router for the Storyteller Agent.
+ * Reads the current narrative state, checks for triggered World Info via regex,
+ * and compiles the necessary flags and pacing info for the LLM.
  */
 export const plotStateTool = tool({
-  description: 'Read current narrative position: active beat, next beat to cover, exit conditions, off-path count. Call at the start of each turn.',
+  description: 'Read current narrative position, actively triggered world info, and active state flags. Call at the start of each turn.',
   inputSchema: z.object({
     sessionId: z.string(),
-    nodeId: z.string().optional().describe('Optional override — uses DB currentNodeId if omitted'),
+    playerQuery: z.string().describe('The raw text the player most recently inputted'),
   }),
-  execute: async ({ sessionId }: { sessionId: string }) => {
+  execute: async ({ sessionId, playerQuery }) => {
     const state = db.select().from(plotStates).where(eq(plotStates.sessionId, sessionId)).get();
 
-    // Look up VNPackage to return node script context
-    let act: { id: string; title: string; objective: string; nodes: any[] } | undefined;
-    let node: { beats: any[]; exitConditions: { condition: string }[]; interactables?: string[]; findings?: string[]; callbacks?: string[]; id: string } | undefined;
+    let act: Act | undefined;
+    let location: Location | undefined;
+    let triggeredWorldInfo: WorldInfo[] = [];
+    let pkg: VNPackage | undefined;
+
     if (state?.packageId) {
       const pkgRow = db.select().from(vnPackages).where(eq(vnPackages.id, state.packageId)).get();
       if (pkgRow) {
-        const pkg = JSON.parse(pkgRow.metaJson) as VNPackage;
+        pkg = JSON.parse(pkgRow.metaJson) as VNPackage;
         act = pkg.plot.acts.find(a => a.id === state.currentActId);
-        node = act?.nodes.find(n => n.id === state.currentNodeId);
+        location = act?.sandboxLocations.find(l => l.id === state.currentLocationId);
       }
     }
 
-    const beat = state?.currentBeat ?? 0;
-    const nudge = state && state.offPathTurns >= 3
-      ? `The player has gone off-track for ${state.offPathTurns} turns. Gently steer toward the exit conditions: ${node?.exitConditions.map(e => e.condition).join(', ') ?? 'see above'}`
-      : undefined;
+    const beatIndex = state?.currentBeat ?? 0;
+    const currentBeat = location?.beats[beatIndex];
+
+    // --- Regex Matching for World Info ---
+    // Combine what the player just said with the current beat's description to see if lore should trigger
+    const matchingText = `${playerQuery} ${currentBeat?.description ?? ''}`.toLowerCase();
+
+    const checkWorldInfo = (infoArray?: WorldInfo[]) => {
+      if (!infoArray) return;
+      for (const info of infoArray) {
+        // If any key matches as a substring (or simple regex) within the combined text
+        const isTriggered = info.keys.some(key => {
+          try {
+            const regex = new RegExp(`\\b${key}\\b`, 'i');
+            return regex.test(matchingText);
+          } catch (e) {
+            // Fallback to simple includes if regex fails to compile
+            return matchingText.includes(key.toLowerCase());
+          }
+        });
+        if (isTriggered) {
+          triggeredWorldInfo.push(info);
+        }
+      }
+    };
+
+    checkWorldInfo(pkg?.plot.globalWorldInfo);
+    checkWorldInfo(act?.scenarioWorldInfo);
+
+    const flags = state ? JSON.parse(state.flagsJson) : {};
 
     return {
       currentActId: state?.currentActId ?? null,
       actObjective: act?.objective ?? null,
-      currentNodeId: state?.currentNodeId ?? null,
-      currentBeat: beat,
-      nextBeat: node?.beats[beat] ?? null,
-      beatsCompleted: node?.beats.slice(0, beat) ?? [],
-      remainingBeats: node?.beats.slice(beat + 1) ?? [],
-      interactables: node?.interactables ?? [],
-      findings: node?.findings ?? [],
-      callbacks: node?.callbacks ?? [],
-      exitConditions: node?.exitConditions ?? [],
-      offPathTurns: state?.offPathTurns ?? 0,
-      completedNodes: state ? JSON.parse(state.completedNodes) : [],
-      flags: state ? JSON.parse(state.flagsJson) : {},
-      nudge,
+      currentLocationId: state?.currentLocationId ?? null,
+      currentLocationTitle: location?.title ?? null,
+      ambientDetail: location?.ambientDetail ?? null,
+
+      currentBeatDescription: currentBeat?.description ?? null,
+      pacingFocus: currentBeat?.pacing.focus ?? 'standard',
+      potentialFlags: currentBeat?.potentialFlags ?? [],
+
+      // Dynamic Context Injections
+      triggeredWorldInfo: triggeredWorldInfo.map(wi => ({ type: wi.type, content: wi.content })),
+      activeFlags: flags,
+
+      // Routing boundaries
+      availableConnections: location?.connections ?? [],
+      pendingInevitableEvents: act?.inevitableEvents?.map(e => ({
+        id: e.id,
+        title: e.title,
+        triggerCondition: e.triggerCondition
+      })) ?? [],
     };
   },
 });

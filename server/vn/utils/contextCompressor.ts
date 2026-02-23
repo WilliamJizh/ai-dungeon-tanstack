@@ -1,9 +1,162 @@
 import { generateText } from 'ai';
-import { getGoogleModel } from '../../lib/modelFactory.js';
+import { getModel } from '../../lib/modelFactory.js';
 import { db } from '../../db/index.js';
 import { plotStates } from '../../db/schema.js';
 import { eq } from 'drizzle-orm';
 import type { UIMessage } from 'ai';
+
+import { TOOL_FLATTENERS } from './toolFlatteners.js';
+
+export function sanitizeHistory(rawMessages: any[]): any[] {
+    const sanitized: any[] = [];
+    const keptPristineTools = new Set<string>();
+    const pristineToolCallIds = new Set<string>();
+
+    // Pass 1: Identify the newest (pristine) tool calls going backward
+    for (let i = rawMessages.length - 1; i >= 0; i--) {
+        const msg = rawMessages[i];
+        if (msg.role === 'assistant' && Array.isArray(msg.content)) {
+            for (const part of msg.content) {
+                if (part.type === 'tool-call') {
+                    if (!keptPristineTools.has(part.toolName)) {
+                        keptPristineTools.add(part.toolName);
+                        if (part.toolCallId) pristineToolCallIds.add(part.toolCallId.trim());
+                    }
+                }
+            }
+        }
+    }
+
+    // Pass 2: Build the sanitized array backward
+    for (let i = rawMessages.length - 1; i >= 0; i--) {
+        const msg = rawMessages[i];
+
+        if (msg.role === 'tool') {
+            const cleanResults: any[] = [];
+            const flatTextResults: string[] = [];
+
+            if (Array.isArray(msg.content)) {
+                for (const part of msg.content) {
+                    const toolName = part.toolName;
+                    const rawOutput = part.result ?? part.output;
+                    const toolCallId = (part.toolCallId || `legacy_${toolName}`).trim();
+
+                    if (pristineToolCallIds.has(toolCallId)) {
+                        // PRISTINE RESULT: Keep it exactly as-is to satisfy the SDK loop
+                        cleanResults.push({
+                            type: 'tool-result',
+                            toolCallId: toolCallId,
+                            toolName: toolName,
+                            output: rawOutput
+                        });
+                    } else if (toolName && TOOL_FLATTENERS[toolName]?.flattenResult) {
+                        // FLATTENED RESULT: Map it to an Assistant Memory block
+                        flatTextResults.push(TOOL_FLATTENERS[toolName].flattenResult!(rawOutput));
+                    }
+                }
+            }
+
+            if (cleanResults.length > 0) {
+                sanitized.push({ role: 'tool', content: cleanResults });
+            }
+
+            // Textual results from flattened state-reads are mapped to a generic assistant text block.
+            // (We will merge consecutive assistant messages at the very end)
+            if (flatTextResults.length > 0) {
+                sanitized.push({
+                    role: 'assistant',
+                    content: flatTextResults.map(text => ({ type: 'text', text }))
+                });
+            }
+            continue;
+        }
+
+        if (msg.role === 'assistant') {
+            const cleanParts: any[] = [];
+
+            if (typeof msg.content === 'string') {
+                cleanParts.push({ type: 'text', text: msg.content });
+            } else if (Array.isArray(msg.content)) {
+                for (const part of msg.content) {
+                    if (part.type === 'text') {
+                        cleanParts.push(part);
+                    } else if (part.type === 'tool-call') {
+                        const toolName = part.toolName;
+                        const toolCallId = part.toolCallId?.trim();
+                        const rawArgs = part.args || part.input;
+
+                        if (pristineToolCallIds.has(toolCallId)) {
+                            // THIS IS THE NEWEST INSTANCE! Keep it perfectly pristine as a one-shot example
+                            // Optional: Strip pure visual bloat from frame builder even on pristine calls to save *some* tokens,
+                            // OR leave it exactly as sent. We'll strip heavy visual stuff from pristine too so it doesn't break limits.
+                            const pristineArgs = { ...rawArgs };
+                            if (toolName === 'frameBuilderTool' && typeof pristineArgs === 'object') {
+                                delete pristineArgs.panels;
+                                delete pristineArgs.effects;
+                                delete pristineArgs.audio;
+                                delete pristineArgs.transition;
+                                delete pristineArgs.hud;
+                                delete pristineArgs.tacticalMapData;
+                                delete pristineArgs.mapData;
+                            }
+
+                            cleanParts.push({
+                                type: 'tool-call',
+                                toolCallId: toolCallId,
+                                toolName: toolName,
+                                args: pristineArgs
+                            });
+                        } else {
+                            // THIS IS AN OLDER INSTANCE.
+                            // Convert it to natural language text instead of a tool call
+                            const flattener = TOOL_FLATTENERS[toolName]?.flattenCall;
+                            const abstractText = flattener
+                                ? flattener(rawArgs)
+                                : `[System Evaluated Tool]: ${toolName}`;
+
+                            cleanParts.push({
+                                type: 'text',
+                                text: abstractText
+                            });
+                        }
+                    }
+                }
+            }
+
+            if (cleanParts.length > 0) {
+                sanitized.push({ role: 'assistant', content: cleanParts });
+            }
+            continue;
+        }
+
+        sanitized.push(msg);
+    }
+
+    // Reverse back to chronological order (oldest to newest)
+    const chronological = sanitized.reverse();
+
+    // Pass 3: Merge consecutive messages with the same role
+    // Dropping intermediate tool results often leaves sequential Assistant messages back-to-back.
+    // The Vercel AI SDK strictly forbids `assistant -> assistant`, they must alternate.
+    const merged: any[] = [];
+    for (const msg of chronological) {
+        if (merged.length > 0 && merged[merged.length - 1].role === msg.role) {
+            const last = merged[merged.length - 1];
+
+            // Normalize content arrays
+            if (typeof last.content === 'string') last.content = [{ type: 'text', text: last.content }];
+            let incoming = msg.content;
+            if (typeof incoming === 'string') incoming = [{ type: 'text', text: incoming }];
+
+            last.content = last.content.concat(incoming);
+        } else {
+            // Shallow clone to avoid mutating raw input arrays during assignment
+            merged.push({ ...msg, content: typeof msg.content === 'string' ? msg.content : [...msg.content] });
+        }
+    }
+
+    return merged;
+}
 
 // ── Watermark thresholds ────────────────────────────────────────────────────
 // When messages exceed HIGH_WATER, summarize the oldest batch and cut to LOW_WATER.
@@ -48,7 +201,7 @@ Focus ONLY on major plot points, permanent inventory/status changes, and choices
 Return ONLY the newly combined summary text.`;
 
     const { text: newSummary } = await generateText({
-        model: getGoogleModel('summarizer'),
+        model: getModel('summarizer'),
         prompt,
     });
 

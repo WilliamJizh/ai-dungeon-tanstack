@@ -1,4 +1,4 @@
-import { ToolLoopAgent, InferAgentUIMessage, hasToolCall, tool } from 'ai';
+import { ToolLoopAgent, InferAgentUIMessage, hasToolCall, tool, stepCountIs } from 'ai';
 import { FRAME_REGISTRY } from '../frameRegistry.js';
 import { z } from 'zod';
 import { frameBuilderTool, FrameInputSchema } from '../tools/frameBuilderTool.js';
@@ -8,10 +8,11 @@ import { yieldToPlayerTool } from '../tools/yieldToPlayerTool.js';
 import { playerStatsTool } from '../tools/playerStatsTool.js';
 import { initCombatTool } from '../tools/initCombatTool.js';
 import { combatEventTool } from '../tools/combatEventTool.js';
+import { recordPlayerActionTool } from '../tools/recordPlayerActionTool.js';
 import type { VNPackage } from '../types/vnTypes.js';
 import type { VNFrame } from '../types/vnFrame.js';
 
-import { getGoogleModel } from '../../lib/modelFactory.js';
+import { getModel } from '../../lib/modelFactory.js';
 
 // ─── Session-bound tool wrappers ─────────────────────────────────────────────
 // The model often omits sessionId from tool calls. Binding it via closures
@@ -19,10 +20,19 @@ import { getGoogleModel } from '../../lib/modelFactory.js';
 
 function bindSessionTools(sessionId: string) {
   return {
+    recordPlayerActionTool: tool({
+      description: recordPlayerActionTool.description!,
+      inputSchema: z.object({
+        flagName: z.string().describe('A semantic key representing the state change (e.g., "barricaded_study_door", "found_turners_revolver", "angered_npm_townsfolk")'),
+        value: z.union([z.boolean(), z.string(), z.number()]).describe('The value of the flag. Usually a boolean, but can hold string/number data if needed.')
+      }),
+      execute: async (input: any) =>
+        (recordPlayerActionTool as any).execute({ ...input, sessionId }),
+    }),
     plotStateTool: tool({
       description: plotStateTool.description!,
       inputSchema: z.object({
-        sceneId: z.string().optional().describe('Optional override — uses DB currentNodeId if omitted'),
+        locationId: z.string().optional().describe('Optional override — uses DB currentLocationId if omitted'),
       }),
       execute: async (input: any) =>
         (plotStateTool as any).execute({ ...input, sessionId }),
@@ -56,8 +66,8 @@ function bindSessionTools(sessionId: string) {
     nodeCompleteTool: tool({
       description: nodeCompleteTool.description!,
       inputSchema: z.object({
-        completedSceneId: z.string().optional().describe('Optional: the ID of the scene that was just completed'),
-        nextSceneId: z.string().optional().describe('The ID of the next scene to transition to'),
+        completedLocationId: z.string().optional().describe('Optional: the ID of the location that was just completed'),
+        nextLocationId: z.string().optional().describe('The ID of the next location to transition to'),
         nextActId: z.string().optional().describe('The ID of the next act, if transitioning between acts'),
       }),
       execute: async (input: any) =>
@@ -134,7 +144,7 @@ function buildCharacterAssetMap(vnPackage: VNPackage): Map<string, string> {
   return map;
 }
 
-export function buildDMSystemPrompt(vnPackage: VNPackage, sessionId: string): string {
+export function buildDMSystemPrompt(vnPackage: VNPackage, sessionId: string, currentActId?: string | null): string {
   const frameTypeLines = FRAME_REGISTRY
     .map(e => `- '${e.type}': ${e.agentSummary}`)
     .join('\n');
@@ -164,16 +174,27 @@ export function buildDMSystemPrompt(vnPackage: VNPackage, sessionId: string): st
     })
     .join('\n');
 
+  const currentAct = currentActId ? vnPackage.plot.acts.find(a => a.id === currentActId) : null;
+  const scenarioContextText = currentAct
+    ? `\nCURRENT ACT SCENARIO CONTEXT (THE HIDDEN TRUTH):\n${currentAct.scenarioContext}\n\nACT NARRATIVE GUIDELINES:\n${currentAct.narrativeGuidelines}`
+    : '';
+
   return `You are a visual novel storyteller DM for "${vnPackage.title}".
 LANGUAGE: ${vnPackage.language ?? 'en'}
 ALL generated text — dialogue, narration, character speech, skill check descriptions, choice text, item names, location labels, status effect names — MUST be written in the language above. No mixing. This is a hard requirement.
 SESSION: sessionId="${sessionId}"
 
-SETTING: ${vnPackage.setting.world}, ${vnPackage.setting.era}. Tone: ${vnPackage.setting.tone}.
-ART STYLE: ${vnPackage.artStyle}
+GLOBAL CONTEXT & SETTING:
+World: ${vnPackage.plot.globalContext.setting}
+Tone: ${vnPackage.plot.globalContext.tone}
+The Truths:
+${vnPackage.plot.globalContext.overarchingTruths.map(t => `- ${t}`).join('\n')}
 
 STORY PREMISE: ${vnPackage.plot.premise}
-POSSIBLE ENDINGS: ${vnPackage.plot.possibleEndings?.join(' | ') || 'Determine ending naturally'}
+POSSIBLE ENDINGS: ${vnPackage.plot.possibleEndings?.join(' | ') || 'Determine ending naturally'}${scenarioContextText}
+
+ART STYLE: ${vnPackage.artStyle}
+
 GLOBAL MATERIALS (Themes, Motifs, Items to seed):
 ${(vnPackage.plot.globalMaterials || []).map(m => `- ${m}`).join('\n')}
 
@@ -198,8 +219,9 @@ You are not generating game text — you are writing a visual novel in the tradi
 - NEVER use dead phrases: "a sense of", "palpable tension", "couldn't help but", "sent shivers down". Replace with the specific physical detail they're hiding behind.
 
 DM WORKFLOW (every turn):
-1. Call plotStateTool() FIRST. Read currentActId, actObjective, nextBeat, exitConditions, callbacks.
-2. Compose frames as cohesive scene moments using frameBuilderTool:
+1. Call plotStateTool() FIRST. Read currentLocationId, actObjective, currentBeatDescription, triggeringWorldInfo, and potentialFlags.
+2. If the player interacts with something meaningful that matches a \`potentialFlag\`, immediately call \`recordPlayerActionTool\` to log it.
+3. Compose frames as cohesive scene moments using frameBuilderTool:
    - Think in SCENES, not frame counts. Each turn presents one continuous scene moment.
    - For narration: use narrations[] array (multiple text beats in one frame, same visual). The player clicks through each beat. ONE full-screen frame per location.
    - For dialogue: use conversation[] array (ordered speaker/text pairs in one frame). Set panels for the 2-3 characters present. ONE dialogue frame per conversation.
@@ -215,13 +237,14 @@ DM WORKFLOW (every turn):
         - 6 or less: Miss. They fail, and you introduce a "hard move" that pushes the narrative into a worse state.
      d. Narrate the consequence using subjective, panicked, or dramatic pacing, then generate the skill-check frame.
    - Honor free-text actions even when off-script. "Fail Forward" — introduce a complication, never an invisible wall.
-3. Turn endings — choose the right mode for the narrative moment:
+4. Turn endings — choose the right mode for the narrative moment:
    - yieldToPlayer({ waitingFor: 'choice' }) — ONLY at genuine decision points. Last frame must be a choice frame with 2-3 options + showFreeTextInput:true.
    - yieldToPlayer({ waitingFor: 'free-text' }) — when the situation is open-ended (exploring, responding to NPC). Last frame should have showFreeTextInput:true. This is the DEFAULT for most turns.
    - yieldToPlayer({ waitingFor: 'continue' }) — for pure narrative turns (atmosphere, character development, unfolding events with no player agency needed).
    - NEVER force a choice frame just because the turn is ending. If the narrative hasn't earned a decision point, use 'free-text' or 'continue'.
    - Guideline: ~1 in 3 turns should end with choices. Intense scenes more, quiet scenes fewer.
-4. Effects are punctuation, not decoration — use sparingly:
+   - **CRITICAL SEQUENCE RULE:** \`yieldToPlayer\` and \`nodeCompleteTool\` are terminal actions. They MUST be the absolute final tool calls in your response. Do NOT generate any further tools (no new frames, no state checks) after calling them in the same turn. If transitioning locations, wait for the NEXT turn to generate the new location's frame.
+5. Effects are punctuation, not decoration — use sparingly:
    - Set audio.musicAsset on the first frame of each scene (use the scene's mood key) with fadeIn:true. Shift it when mood changes.
    - Frame-level effects[]: use at most 1 per frame, and only on scene-setting frames (fade-in for arrivals, vignette-pulse for first moment of dread).
    - Per-line effects (conversation/narrations .effect): use on AT MOST 1-2 lines per frame. Most lines should have NO effect. Reserve for moments of genuine impact:
@@ -232,10 +255,14 @@ DM WORKFLOW (every turn):
      • flash — a sudden revelation or lightning
    - NEVER apply effects to consecutive lines. Space them out. A shake followed immediately by a flash feels like a broken game, not drama.
    - If you catch yourself adding effects to more than 2 lines in a frame, remove most of them. The one that survives should be the moment that matters most.
-5. If exitConditions from plotStateTool are met → build frames narrating the consequence, then nodeCompleteTool. Do not rush transitions.
-   Otherwise → choose yield mode per point 3 based on narrative state.
 
-RHYTHM — THREE GEARS:
+RHYTHM AND FRAME DENSITY (PACING):
+A "click" is one item in the \`narrations[]\` or \`conversation[]\` arrays. Pay strict attention to the \`pacingFocus\` returned by \`plotStateTool\` to dictate your output length:
+- \`dialogue_and_worldbuilding\`: Long, dense frames. Aim for 15-20 clicks (\`narrations\`/\`conversation\` entries) per frame.
+- \`standard\`: Average pacing. Aim for ~10 clicks per frame.
+- \`tension_and_action\`: Fast, punchy pacing. Aim for 5-8 clicks per frame. Short sentences.
+
+STORYTELLING TEMPO ACROSS A SCENE:
 Storytelling has tempo. Shift between these gears within and across turns:
 - FIRST GEAR (slow): World-building, atmosphere, arrival. Long multi-paragraph narrations[]. Few characters. No choices. End with 'continue' or 'free-text'. Think: the opening pages of a novel chapter.
 - SECOND GEAR (medium): Character interaction, investigation, conversation[] exchanges. Mix of dialogue and narration frames. Occasional choices when conversation reaches a turning point. The workhorse gear.
@@ -273,6 +300,7 @@ STRICT ASSET RULES:
 - Use effects for drama: shake for impacts, flash for revelations, fade-in for scene opens.
 - Aim for 1-3 frames per turn (narrations/conversation arrays handle density within frames). Never exceed 6. Call frameBuilderTool once per frame — do NOT batch.
 - **CRITICAL FORMAT RULE:** Never generate empty object payloads for \`frameBuilderTool\`. You MUST always populate \`type\`, \`panels\`, and \`dialogue\` OR \`narration\`.
+- **NO PLAIN TEXT RESPONSES:** You are an API. You must NEVER respond with plain conversational text outside of tool calls. All narrative content, dialogue, choices, and atmospheric descriptions MUST be delivered exclusively via the \`frameBuilderTool\` and other designated tools. Your raw text output must remain empty.
 
 INTERACTIVE GAMEPLAY FRAMES (use these to create engaging moments beyond dialogue):
 
@@ -286,7 +314,7 @@ ${workflowEntries}
 export function createStorytellerAgent(vnPackage: VNPackage, sessionId: string) {
   const bound = bindSessionTools(sessionId);
   return new ToolLoopAgent({
-    model: getGoogleModel('storyteller'),
+    model: getModel('storyteller'),
     instructions: buildDMSystemPrompt(vnPackage, sessionId),
     tools: {
       plotStateTool: bound.plotStateTool,
@@ -296,8 +324,10 @@ export function createStorytellerAgent(vnPackage: VNPackage, sessionId: string) 
       playerStatsTool: bound.playerStatsTool,
       initCombatTool: bound.initCombatTool,
       combatEventTool: bound.combatEventTool,
+      recordPlayerActionTool: bound.recordPlayerActionTool,
     },
     stopWhen: (step: any) =>
+      stepCountIs(10)(step) ||
       (hasToolCall('yieldToPlayer') as (s: any) => boolean)(step) ||
       (hasToolCall('nodeCompleteTool') as (s: any) => boolean)(step),
   });
@@ -309,11 +339,11 @@ const _typeAgent = new ToolLoopAgent({
   model: undefined as never,
   tools: {
     plotStateTool: tool({
-      inputSchema: z.object({ sessionId: z.string(), sceneId: z.string().optional() }),
+      inputSchema: z.object({ sessionId: z.string(), locationId: z.string().optional() }),
       execute: async () => ({
         currentActId: null as string | null,
         actObjective: null as string | null,
-        currentNodeId: null as string | null,
+        currentLocationId: null as string | null,
         currentBeat: 0,
         nextBeat: null as string | null,
         beatsCompleted: [] as string[],
@@ -323,7 +353,7 @@ const _typeAgent = new ToolLoopAgent({
         callbacks: [] as string[],
         exitConditions: [] as string[],
         offPathTurns: 0,
-        completedNodes: [] as string[],
+        completedLocations: [] as string[],
         flags: {} as Record<string, unknown>,
         nudge: undefined as string | undefined,
       }),
@@ -335,14 +365,14 @@ const _typeAgent = new ToolLoopAgent({
     nodeCompleteTool: tool({
       inputSchema: z.object({
         sessionId: z.string(),
-        completedSceneId: z.string().optional(),
-        nextSceneId: z.string().optional(),
+        completedLocationId: z.string().optional(),
+        nextLocationId: z.string().optional(),
         nextActId: z.string().optional(),
       }),
       execute: async () => ({
         ok: true as const,
-        completedSceneId: '',
-        nextSceneId: null as string | null,
+        completedLocationId: '',
+        nextLocationId: null as string | null,
         nextActId: null as string | null,
         isGameComplete: false,
       }),
@@ -417,6 +447,14 @@ const _typeAgent = new ToolLoopAgent({
           tacticalMapData: {} as Record<string, unknown>,
         },
       }),
+    }),
+    recordPlayerActionTool: tool({
+      inputSchema: z.object({
+        sessionId: z.string(),
+        flagName: z.string(),
+        value: z.union([z.boolean(), z.string(), z.number()]),
+      }),
+      execute: async () => ({ success: true, message: '' }),
     }),
   },
 });
