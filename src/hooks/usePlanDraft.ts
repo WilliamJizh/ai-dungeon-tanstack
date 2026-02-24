@@ -11,25 +11,25 @@ export interface DraftCharacter {
   imageUrl?: string;
 }
 
-export interface DraftBeat {
+export interface DraftEncounter {
   id: string;
   title: string;
   description: string;
-  pacing: string;
+  type: string;
+  pacing: { expectedFrames: number; focus: string };
+  priority?: string;
+  givesProgression?: number;
+  potentialFlags?: string[];
   findings?: string[];
   interactables?: string[];
-  foreshadowing?: string;
-  objective?: string;
-  nextBeatIfFailed?: string;
-  musicUrl?: string;
 }
 
 export interface DraftNode {
   id: string;
   title: string;
   location: string;
-  beats: DraftBeat[];
-  exitConditions: { condition: string; nextNodeId?: string }[];
+  encounters: DraftEncounter[];
+  connections: string[];
   mood: string;
   backgroundUrl?: string;
   musicUrl?: string;
@@ -85,24 +85,19 @@ export function usePlanDraft(messages: PlanningUIMessage[]): PlanDraftState {
             id: input.id,
             title: input.title,
             location: input.location,
-            beats: current?.beats || [],
-            exitConditions: (input as any).exitConditions || [],
+            encounters: current?.encounters || [],
+            connections: (input as any).connections || [],
             mood: (input as any).mood || '',
             backgroundUrl: current?.backgroundUrl,
             musicUrl: current?.musicUrl,
           });
         }
 
-        if (part.type === 'tool-draftNodeBeats') {
-          const input = (part as { input: { nodeId: string; beats: any[] } }).input;
+        if (part.type === 'tool-draftNodeEncounters') {
+          const input = (part as { input: { nodeId: string; encounters: any[] } }).input;
           const current = sceneMap.get(input.nodeId);
           if (current) {
-            current.beats = input.beats.map((b, i) => ({
-              ...b,
-              id: `${current.id}-beat-${i + 1}`,
-              title: `Beat ${i + 1}`,
-              musicUrl: current.musicUrl
-            })) as DraftBeat[];
+            current.encounters = input.encounters as DraftEncounter[];
           }
         }
 

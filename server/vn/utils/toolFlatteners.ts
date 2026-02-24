@@ -34,7 +34,21 @@ export const TOOL_FLATTENERS: Record<string, ToolHistoryFlattener> = {
 
     plotStateTool: {
         flattenCall: () => `[System Checked Plot State]`,
-        flattenResult: (result) => `[System Memory - Plot State]: ${JSON.stringify(result)}`
+        flattenResult: (result) => {
+            // For sandbox mode (Director-powered), flatten to a concise summary
+            if (result.directorBrief) {
+                const parts = [
+                    `Location: ${result.currentLocationTitle ?? result.currentLocationId}`,
+                    `Director: ${result.directorBrief}`,
+                ];
+                if (result.activeComplication) parts.push(`Complication: ${result.activeComplication}`);
+                if (result.currentEncounter) parts.push(`Encounter: ${result.currentEncounter.title}`);
+                if (result.globalProgression) parts.push(`Progress: ${result.globalProgression.current}/${result.globalProgression.required}`);
+                return `[System Memory - Direction Pack]: ${parts.join(' | ')}`;
+            }
+            // Legacy beat mode
+            return `[System Memory - Plot State]: ${JSON.stringify(result)}`;
+        }
     },
 
     playerStatsTool: {
@@ -52,6 +66,11 @@ export const TOOL_FLATTENERS: Record<string, ToolHistoryFlattener> = {
 
     nodeCompleteTool: {
         flattenCall: (args) => `[System Completed Node]: Transitioning to ${args.nextNodeId}`
+    },
+
+    requestTravelTool: {
+        flattenCall: (args) => `[System Travel]: Moving to location ${args.targetLocationId}`,
+        flattenResult: (result) => `[System Arrived]: ${result.newLocationTitle ?? result.newLocationId ?? 'new location'}`
     },
 
     initCombatTool: {

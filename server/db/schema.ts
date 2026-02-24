@@ -38,6 +38,22 @@ export const plotStates = sqliteTable('plot_states', {
   flagsJson: text('flags_json').notNull().default('{}'),
   /** JSON-serialised PlayerStats for the session. */
   playerStatsJson: text('player_stats_json').notNull().default('{}'),
+  /** Turn counter incremented after each storyteller turn. */
+  turnCount: integer('turn_count').notNull().default(0),
+  /** Global progression value toward the current act's goal. */
+  globalProgression: integer('global_progression').notNull().default(0),
+  /** JSON object tracking the opposing force / doom clock state. */
+  opposingForceJson: text('opposing_force_json').notNull().default('{}'),
+  /** JSON map of character ID → { currentLocationId, disposition } for dynamic NPC state. */
+  characterStatesJson: text('character_states_json').notNull().default('{}'),
+  /** JSON object for active Director-injected complication, or null. */
+  activeComplicationJson: text('active_complication_json').notNull().default('null'),
+  /** JSON array of encounter IDs that have been completed/exhausted. */
+  exhaustedEncountersJson: text('exhausted_encounters_json').notNull().default('[]'),
+  /** JSON map of locationId → Encounter[] for Director-injected encounters. */
+  injectedEncountersJson: text('injected_encounters_json').notNull().default('{}'),
+  /** JSON scratchpad for Director continuity across turns. */
+  directorNotesJson: text('director_notes_json').notNull().default('{}'),
   updatedAt: text('updated_at').notNull(),
 });
 

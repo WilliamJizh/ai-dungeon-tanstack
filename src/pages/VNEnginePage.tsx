@@ -75,18 +75,18 @@ function StorytellerSession({
     [messages],
   );
 
-  // Detect pending node completion from the latest nodeCompleteTool output
+  // Detect pending travel from the latest requestTravelTool output
   const pendingNodeComplete = useMemo<string | null | undefined>(() => {
     for (const msg of [...messages].reverse()) {
       if (msg.role !== 'assistant') continue;
       for (const part of [...msg.parts].reverse()) {
         if (
           isToolUIPart(part) &&
-          part.type === 'tool-nodeCompleteTool' &&
+          (part.type === 'tool-requestTravelTool' || part.type === 'tool-nodeCompleteTool') &&
           part.state === 'output-available'
         ) {
-          const out = (part as { output: { nextNodeId?: string | null } }).output;
-          return out.nextNodeId ?? null;
+          const out = (part as { output: { newLocationId?: string | null; nextNodeId?: string | null } }).output;
+          return out.newLocationId ?? out.nextNodeId ?? null;
         }
       }
     }

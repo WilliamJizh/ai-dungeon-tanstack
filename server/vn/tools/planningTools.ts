@@ -9,7 +9,7 @@ import { db } from '../../db/index.js';
 import { vnPackages } from '../../db/schema.js';
 import { vnPackageStore } from '../state/vnPackageStore.js';
 import { renderStoryTree } from '../utils/storyVisualizer.js';
-import type { PlanSession, PlanDraftCharacter } from '../state/planSessionStore.js';
+import type { PlanSession, PlanDraftCharacter, PlanDraftEncounter } from '../state/planSessionStore.js';
 import { fileURLToPath } from 'node:url';
 import { eq } from 'drizzle-orm';
 
@@ -56,6 +56,23 @@ const proposeCharacterInput = z.object({
   role: z.enum(['protagonist', 'ally', 'antagonist', 'npc']),
   description: z.string().describe('Personality, backstory, motivations'),
   imagePrompt: z.string().describe('Detailed visual prompt for character portrait generation'),
+  personalArc: z.object({
+    want: z.string().describe('What the character consciously desires'),
+    need: z.string().describe('What the character actually needs to grow'),
+    arcEncounters: z.array(z.object({
+      id: z.string(),
+      title: z.string(),
+      description: z.string(),
+      type: z.enum(['discovery', 'npc_interaction', 'combat', 'puzzle', 'atmospheric']),
+      pacing: z.object({
+        expectedFrames: z.number(),
+        focus: z.enum(['dialogue_and_worldbuilding', 'standard', 'tension_and_action']),
+      }),
+      arcPhase: z.enum(['introduction', 'development', 'crisis', 'resolution']),
+      potentialFlags: z.array(z.string()).optional(),
+      givesProgression: z.number().optional(),
+    })).describe('Encounters specific to this character\'s arc, injected by the Director at the right moments'),
+  }).optional().describe('Character arc for sandbox mode — the Director uses this to weave character-specific encounters into the story'),
 });
 
 // ─── draftActOutline ────────────────────────────────────────────────────────
@@ -84,6 +101,18 @@ const draftActOutlineInput = z.object({
     content: z.string(),
     type: z.enum(['lore', 'entity', 'atmosphere']),
   })).optional().describe('Keyword-triggered lore specific to this Act'),
+  globalProgression: z.object({
+    requiredValue: z.number().describe('Progression value needed to complete this act'),
+    trackerLabel: z.string().describe('Display label, e.g. "线索收集进度"'),
+  }).optional().describe('Player progression tracker toward the act objective — encounters with givesProgression increment this'),
+  opposingForce: z.object({
+    trackerLabel: z.string().describe('Display label, e.g. "时间悖论警戒值"'),
+    requiredValue: z.number().describe('Max value before forced climax'),
+    escalationEvents: z.array(z.object({
+      threshold: z.number(),
+      description: z.string().describe('What happens when this threshold is reached'),
+    })),
+  }).optional().describe('Doom clock / opposing force that creates pacing pressure — ticks when player wastes time or makes mistakes'),
 });
 
 // ─── draftNodeWeb ───────────────────────────────────────────────────────────
@@ -102,23 +131,30 @@ const draftNodeWebInput = z.object({
   })).min(1).describe('The fully connected sandbox of locations for this act.'),
 });
 
-// ─── draftNodeBeats ─────────────────────────────────────────────────────────
+// ─── draftNodeEncounters ─────────────────────────────────────────────────────
 
-const draftNodeBeatsInput = z.object({
+const draftNodeEncountersInput = z.object({
   actId: z.string().describe('The ID of the Act containing the location'),
-  nodeId: z.string().describe('The ID of the location to populate beats for (still called nodeId for legacy compat)'),
-  beats: z.array(z.object({
-    id: z.string().optional(),
-    description: z.string().describe('The core narrative action or event of this beat'),
+  nodeId: z.string().describe('The ID of the location to populate encounters for'),
+  encounters: z.array(z.object({
+    id: z.string().describe('Unique encounter slug, e.g. "enc_locked_drawer"'),
+    title: z.string().describe('Short title for the encounter'),
+    description: z.string().describe('What happens — DM instructions for narrating this encounter'),
+    type: z.enum(['discovery', 'npc_interaction', 'combat', 'puzzle', 'atmospheric']).describe('The encounter category'),
     pacing: z.object({
-      expectedFrames: z.number().describe('How many frames this beat should take approximately'),
-      focus: z.enum(['dialogue_and_worldbuilding', 'standard', 'tension_and_action']).describe('Dictates the frame density (10-20 clicks for dialogue, 5-8 for action)')
+      expectedFrames: z.number().describe('Approximate frame count for this encounter'),
+      focus: z.enum(['dialogue_and_worldbuilding', 'standard', 'tension_and_action']).describe('Dictates frame density and narrative focus'),
     }),
-    findings: z.array(z.string()).optional().describe('Specific clues uncovered during this exact beat'),
-    interactables: z.array(z.string()).optional().describe('Items relevant or discoverable in this exact beat'),
-    potentialFlags: z.array(z.string()).optional().describe('Semantic state flags the player could earn here (e.g. "barricaded_door", "found_revolver")'),
-    foreshadowing: z.string().optional().describe('Subtle hints to lay the groundwork for future beats, allowing the DM to build tension'),
-  })).min(1).describe('Ordered narrative beats guiding the storyteller agent'),
+    prerequisites: z.array(z.string()).optional().describe('Flag names that must be set for this encounter to become available'),
+    excludeIfFlags: z.array(z.string()).optional().describe('Skip this encounter if any of these flags are set'),
+    requiredCharacters: z.array(z.string()).optional().describe('Characters that must be present for this encounter'),
+    givesProgression: z.number().optional().describe('How much to increment the act\'s globalProgression when this encounter completes'),
+    potentialFlags: z.array(z.string()).optional().describe('Semantic flags the player could earn (e.g. "found_old_phone", "alienated_mei")'),
+    findings: z.array(z.string()).optional().describe('Clues or discoveries made during this encounter'),
+    interactables: z.array(z.string()).optional().describe('Items discoverable or usable in this encounter'),
+    priority: z.enum(['low', 'normal', 'high', 'urgent']).default('normal').describe('Director uses this to prioritize encounter selection'),
+    repeatable: z.boolean().default(false).describe('Whether this encounter can trigger again after completion'),
+  })).min(1).describe('Unordered encounter pool — the Director selects which to activate based on context, flags, and pacing'),
 });
 
 // ─── finalizeNode ────────────────────────────────────────────────────────────
@@ -185,9 +221,23 @@ export function createPlanningTools(session: PlanSession) {
         }
 
         const character: PlanDraftCharacter = {
-          ...input,
+          id: input.id,
+          name: input.name,
+          role: input.role,
+          description: input.description,
+          imagePrompt: input.imagePrompt,
           imageUrl,
           imageMimeType,
+          personalArc: input.personalArc ? {
+            want: input.personalArc.want,
+            need: input.personalArc.need,
+            arcEncounters: input.personalArc.arcEncounters.map(e => ({
+              ...e,
+              priority: 'normal' as const,
+              repeatable: false,
+              arcCharacterId: input.id,
+            })),
+          } : undefined,
         };
 
         const idx = draft.characters.findIndex(c => c.id === input.id);
@@ -214,13 +264,15 @@ export function createPlanningTools(session: PlanSession) {
           narrativeGuidelines: input.narrativeGuidelines,
           inevitableEvents: input.inevitableEvents,
           scenarioWorldInfo: input.scenarioWorldInfo,
+          globalProgression: input.globalProgression,
+          opposingForce: input.opposingForce,
           nodes: input.intendedLocations.map(locationId => ({
             id: locationId,
             title: '',
             location: '',
             requiredCharacters: [],
             ambientDetail: '',
-            beats: [],
+            encounters: [],
             connections: [],
             mood: '',
           }))
@@ -245,27 +297,27 @@ export function createPlanningTools(session: PlanSession) {
         for (const outline of input.locations) {
           const nodeIndex = act.nodes.findIndex((n: any) => n.id === outline.id);
           if (nodeIndex >= 0) {
-            act.nodes[nodeIndex] = { ...act.nodes[nodeIndex], ...outline, beats: act.nodes[nodeIndex].beats || [] } as any;
+            act.nodes[nodeIndex] = { ...act.nodes[nodeIndex], ...outline, encounters: act.nodes[nodeIndex].encounters || [] } as any;
           } else {
-            act.nodes.push({ ...outline, beats: [] } as any);
+            act.nodes.push({ ...outline, encounters: [] } as any);
           }
         }
         return { ok: true, updatedLocations: input.locations.length };
       },
     }),
 
-    draftNodeBeats: tool({
-      description: 'Step 2 of Node generation. Given a drafted node outline, flesh out the detailed Beat objects, including pacing rules, hidden findings, and objectives.',
-      inputSchema: draftNodeBeatsInput,
+    draftNodeEncounters: tool({
+      description: 'Step 3 of Act generation. Populate a location with its encounter pool. The Director will select encounters dynamically during gameplay based on context, flags, and pacing.',
+      inputSchema: draftNodeEncountersInput,
       execute: async (input) => {
         const act = draft.acts.find(a => a.id === input.actId);
         if (!act) return { ok: false, error: `Act ${input.actId} not found.` };
 
         const node = act.nodes.find(n => n.id === input.nodeId);
-        if (!node) return { ok: false, error: `Node outline ${input.nodeId} not found. Call draftNodeOutline first.` };
+        if (!node) return { ok: false, error: `Location ${input.nodeId} not found. Call draftNodeWeb first.` };
 
-        node.beats = input.beats;
-        return { ok: true, updated: input.nodeId, beatCount: input.beats.length };
+        node.encounters = input.encounters as PlanDraftEncounter[];
+        return { ok: true, updated: input.nodeId, encounterCount: input.encounters.length };
       },
     }),
 
@@ -278,7 +330,7 @@ export function createPlanningTools(session: PlanSession) {
 
         const node = act.nodes.find(n => n.id === input.nodeId);
         if (!node) return { ok: false, error: `Node ${input.nodeId} not found.` };
-        if (node.beats.length === 0) return { ok: false, error: `Node ${input.nodeId} has no beats. Call draftNodeBeats first.` };
+        if (node.encounters.length === 0) return { ok: false, error: `Location ${input.nodeId} has no encounters. Call draftNodeEncounters first.` };
 
         let backgroundMimeType = 'image/png';
         const backgroundUrl = `/generated/${packageId}/${node.location}.png`;
@@ -416,19 +468,32 @@ export function createPlanningTools(session: PlanSession) {
             forcesClimax: e.forcesClimax ?? false
           })),
           scenarioWorldInfo: a.scenarioWorldInfo,
+          globalProgression: a.globalProgression,
+          opposingForce: a.opposingForce,
           sandboxLocations: a.nodes.map(n => ({
             id: n.id,
             title: n.title,
             location: n.location,
             requiredCharacters: n.requiredCharacters,
             ambientDetail: n.ambientDetail,
-            beats: n.beats.map(b => ({
-              description: b.description,
-              pacing: b.pacing,
-              findings: b.findings,
-              interactables: b.interactables,
-              potentialFlags: b.potentialFlags,
-              foreshadowing: b.foreshadowing
+            beats: [],
+            encounters: n.encounters.map(enc => ({
+              id: enc.id,
+              title: enc.title,
+              description: enc.description,
+              type: enc.type,
+              pacing: enc.pacing,
+              prerequisites: enc.prerequisites,
+              excludeIfFlags: enc.excludeIfFlags,
+              requiredCharacters: enc.requiredCharacters,
+              givesProgression: enc.givesProgression,
+              potentialFlags: enc.potentialFlags,
+              findings: enc.findings,
+              interactables: enc.interactables,
+              arcCharacterId: enc.arcCharacterId,
+              arcPhase: enc.arcPhase,
+              priority: enc.priority ?? 'normal',
+              repeatable: enc.repeatable ?? false,
             })),
             callbacks: n.callbacks,
             connections: n.connections,
@@ -451,6 +516,7 @@ export function createPlanningTools(session: PlanSession) {
             role: c.role,
             description: c.description,
             imagePrompt: c.imagePrompt,
+            ...(c.personalArc ? { personalArc: c.personalArc } : {}),
           })),
           plot: {
             premise: premise.premise,
@@ -516,7 +582,7 @@ export const planningToolSchemas = {
   proposeCharacter: proposeCharacterInput,
   draftActOutline: draftActOutlineInput,
   draftNodeWeb: draftNodeWebInput,
-  draftNodeBeats: draftNodeBeatsInput,
+  draftNodeEncounters: draftNodeEncountersInput,
   finalizeNode: finalizeNodeInput,
   updateElement: updateElementInput,
   finalizePackage: finalizePackageInput,

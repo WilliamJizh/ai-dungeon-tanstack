@@ -81,3 +81,13 @@ try { sqlite.exec(`ALTER TABLE plot_states ADD COLUMN player_stats_json TEXT NOT
 // Add tags/source columns to ai_traces if they don't exist (migration)
 try { sqlite.exec(`ALTER TABLE ai_traces ADD COLUMN tags TEXT`); } catch (_) { }
 try { sqlite.exec(`ALTER TABLE ai_traces ADD COLUMN source TEXT`); } catch (_) { }
+
+// Sandbox + Director architecture columns (migration)
+try { sqlite.exec(`ALTER TABLE plot_states ADD COLUMN turn_count INTEGER NOT NULL DEFAULT 0`); } catch (_) { }
+try { sqlite.exec(`ALTER TABLE plot_states ADD COLUMN global_progression INTEGER NOT NULL DEFAULT 0`); } catch (_) { }
+try { sqlite.exec(`ALTER TABLE plot_states ADD COLUMN opposing_force_json TEXT NOT NULL DEFAULT '{}'`); } catch (_) { }
+try { sqlite.exec(`ALTER TABLE plot_states ADD COLUMN character_states_json TEXT NOT NULL DEFAULT '{}'`); } catch (_) { }
+try { sqlite.exec(`ALTER TABLE plot_states ADD COLUMN active_complication_json TEXT NOT NULL DEFAULT 'null'`); } catch (_) { }
+try { sqlite.exec(`ALTER TABLE plot_states ADD COLUMN exhausted_encounters_json TEXT NOT NULL DEFAULT '[]'`); } catch (_) { }
+try { sqlite.exec(`ALTER TABLE plot_states ADD COLUMN injected_encounters_json TEXT NOT NULL DEFAULT '{}'`); } catch (_) { }
+try { sqlite.exec(`ALTER TABLE plot_states ADD COLUMN director_notes_json TEXT NOT NULL DEFAULT '{}'`); } catch (_) { }

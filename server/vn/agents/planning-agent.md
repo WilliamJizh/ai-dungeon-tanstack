@@ -2,7 +2,7 @@
 
 # Planning Agent Reference
 
-Collaborative visual novel co-author. Works with users through conversation to design a complete **Act → Node → Beat** story structure with generated assets, networked branching, and fail-forward routing.
+Collaborative visual novel co-author. Works with users through conversation to design an interactive, sandbox-style visual novel with **Director/Storyteller dual-agent architecture**. Produces encounter-based story backbones with progression tracking, doom clocks, and character arcs.
 
 > See also: [../CLAUDE.md](../CLAUDE.md) for VNPackage/VNFrame schemas | [storyteller-agent.md](storyteller-agent.md) for gameplay agent
 
@@ -14,24 +14,35 @@ Creating a rich sandbox in a single shot is impossible for an LLM. The Planner e
 
 ```mermaid
 graph LR
-    A["Step 1<br/>draftActOutline<br/>(The Skeleton & Truths)"] --> B["Step 2<br/>draftNodeWeb<br/>(The Sandbox Map)"]
-    B --> C["Step 3<br/>draftNodeBeats<br/>(The Pacing & Flags)"]
+    A["Step 1<br/>draftActOutline<br/>(Skeleton, Progression, Doom Clock)"] --> B["Step 2<br/>draftNodeWeb<br/>(Sandbox Map)"]
+    B --> C["Step 3<br/>draftNodeEncounters<br/>(Encounter Pools & Flags)"]
     C --> D["Step 4<br/>finalizeNode<br/>(Assets + Polish)"]
     D --> E["finalizePackage<br/>(Save)"]
 ```
 
 | Step | Tool | What it does |
 |------|------|-------------|
-| **1. Skeleton** | `draftActOutline` | Proposes the Act's objective, scenario context, inevitable events, and placeholder sandbox locations |
-| **2. Sandbox Map** | `draftNodeWeb` | Wires Locations into a spatial sandbox with `connections` |
-| **3. Pacing & Flags** | `draftNodeBeats` | Populates each Location with ordered narrative beats, pacing rules, findings, interactables, and potential status flags |
+| **1. Skeleton** | `draftActOutline` | Proposes the Act's objective, scenario context, inevitable events, progression tracker, doom clock, and placeholder locations |
+| **2. Sandbox Map** | `draftNodeWeb` | Wires Locations into a spatial sandbox with `connections`, ambient details, characters |
+| **3. Encounter Pools** | `draftNodeEncounters` | Populates each Location with unordered encounters — the Director selects which to activate based on flags, progression, and pacing |
 | **4. Assets** | `finalizeNode` | Generates background image + ambient music for each Location |
 
 ### Why This Order Matters
 - **Step 1 before 2:** Can't wire connections between Locations that don't exist yet
-- **Step 2 before 3:** Beats need to know the Location's role in the sandbox
-- **Step 3 before 4:** Asset prompts should reflect the narrative content of the Location
-- **Constraint:** `draftNodeBeats` MUST assign specific Semantic Flags for the player to discover.
+- **Step 2 before 3:** Encounters need to know the Location's role, characters, and connections
+- **Step 3 before 4:** Asset prompts should reflect the encounter content at each location
+- **Constraint:** Encounters MUST assign specific `potentialFlags` and `givesProgression` values for the Director to track progression
+
+---
+
+## Director/Storyteller Architecture
+
+The Planning Agent designs story backbones for a two-agent runtime system:
+
+- **Director** (hidden LLM, inside `plotStateTool`): Reads full story state, selects encounters from the pool, manages doom clock / NPC arcs / complications, produces a free-form **Direction Pack** for the Storyteller.
+- **Storyteller** (visible agent): Renders the current beat into VN frames. Never knows the Director exists.
+
+**Key implication for planning:** Design encounters as self-contained units that work in any order. The Director dynamically selects them — the author can't predict the exact sequence.
 
 ---
 
@@ -41,52 +52,9 @@ graph LR
 |----------|-------|
 | **File** | `server/vn/agents/planningChatAgent.ts` |
 | **Type** | `ToolLoopAgent` (AI SDK) |
-| **Model** | Google Gemini via `getGoogleModel('planning')` |
+| **Model** | Google Gemini via `getModel('planning')` |
 | **Stop Condition** | `hasToolCall('finalizePackage')` |
 | **UI Message Type** | `PlanningUIMessage = InferAgentUIMessage<typeof agent>` |
-
----
-
-## System Prompt Philosophy
-
-### Role
-```
-You are a collaborative visual novel co-author and expert Narrative Architect.
-Design an interactive, node-based visual novel with networked branching.
-```
-
-### Language Enforcement
-```
-LANGUAGE: "${language}" (BCP-47). Pre-selected, do NOT ask.
-ALL generated content MUST be in this language only. No mixing.
-```
-
-### Structural Design (TRPG & AVG Fusion)
-- **Four Act Structure:** Setup, Rising Action, Climax, Resolution
-- **Sandbox Locations:** Players explore interconnected Locations filled with clues and interactions
-- **Inevitable Events:** Predetermined events acting as boundaries or plot escalations
-- **Hidden Contexts:** DM-only truths to color narration
-- **Semantic Flags:** Used instead of fuzzy action logging for reliable conditional branching
-
-### Prose Voice Rules
-- **Show, don't tell** — physical reactions/environment, never state emotions directly
-- **Specific vocabulary** — ban clichés, use muscular verbs and concrete nouns
-- **Sensory grounding** — anchor descriptions in at least two senses
-- **PbtA stats** — assign 2d6 modifiers (e.g., `Charm +2`, `Logic -1`) in character descriptions for DM skill checks
-
-### Workflow Sequence
-```
-0. RESEARCH FIRST — Use googleSearch before proposing content
-1. Ask about genre, setting, language
-2. proposeStoryPremise (with broad endings + globalMaterials)
-3. proposeCharacter (one at a time, lowercase slug IDs)
-4. draftActOutline → draftNodeWeb → draftNodeBeats → finalizeNode (per Act)
-5. updateElement for tweaks
-6. finalizePackage (only when user confirms)
-```
-
-### Tone
-Conversational. Avoid walls of text.
 
 ---
 
@@ -104,10 +72,11 @@ Sets the narrative anchor. Called once early in planning.
   title: string
   artStyle: string                    // "cel-shaded anime, dark and moody"
   language: string                    // BCP-47, default 'en'
-  setting: { world, era, tone }
+  globalContext: { setting, tone, overarchingTruths[] }
   premise: string                     // 1-2 sentence story premise
   themes: string[]                    // Core themes
   globalMaterials: string[]           // Reusable narrative anchors (motifs, items, symbols)
+  globalWorldInfo?: WorldInfo[]       // Keyword-triggered lore
   possibleEndings: string[]           // 2-3 ending categories
 }
 ```
@@ -118,42 +87,66 @@ Sets the narrative anchor. Called once early in planning.
 
 ### `proposeCharacter`
 
-Creates a character with portrait generation. Called once per character.
+Creates a character with portrait generation and optional personal arc.
 
 **Input:**
 ```typescript
 {
-  id: string                          // Lowercase slug = asset key, e.g. "kira_voss"
+  id: string                          // Lowercase slug = asset key, e.g. "lin_mei"
   name: string
   role: 'protagonist' | 'ally' | 'antagonist' | 'npc'
   description: string                 // Personality, backstory, PbtA stat modifiers
   imagePrompt: string                 // Visual generation prompt
+  personalArc?: {
+    want: string                      // What the character consciously desires
+    need: string                      // What the character actually needs to grow
+    arcEncounters: [{                 // Character-specific encounters injected by the Director
+      id, title, description, type, pacing,
+      arcPhase: 'introduction' | 'development' | 'crisis' | 'resolution',
+      potentialFlags?, givesProgression?
+    }]
+  }
 }
 ```
 
 **Returns:** `{ ok: true, id, name, imageUrl }`
 
-**Side effects:** Generates PNG portrait → `/public/generated/{packageId}/{id}.png`
+**Side effects:** Generates PNG portrait
 
 ---
 
 ### `draftActOutline` — Pipeline Step 1
 
-Proposes the Act skeleton: objective + placeholder Node slugs.
+Proposes the Act skeleton with progression and doom clock.
 
 **Input:**
 ```typescript
 {
-  id: string                          // e.g. "act_1_sern"
-  title: string                       // "Infiltrate SERN"
-  objective: string                   // "Find the IBN-5100"
-  intendedNodes: string[]             // ["node_loading_dock", "node_server_room", ...]
+  id: string
+  title: string
+  objective: string
+  scenarioContext: string             // Hidden truth for DM
+  narrativeGuidelines: string        // Stylistic rules
+  intendedLocations: string[]        // Location slugs
+  inevitableEvents?: [{
+    id, title, triggerCondition, description,
+    forcesClimax: boolean,
+    conditionalBranches?: [{ condition, effect }]
+  }]
+  scenarioWorldInfo?: WorldInfo[]
+  globalProgression?: {
+    requiredValue: number             // Progress needed to complete act
+    trackerLabel: string              // e.g. "Clues Uncovered"
+  }
+  opposingForce?: {
+    trackerLabel: string              // e.g. "Time Paradox Alert"
+    requiredValue: number             // Max before forced climax
+    escalationEvents: [{ threshold, description }]
+  }
 }
 ```
 
-**Returns:** `{ ok: true, id, title, nodeCount }`
-
-**Effect:** Creates Act + initializes empty Node objects for every slug.
+**Returns:** `{ ok: true, id, title }`
 
 ---
 
@@ -166,14 +159,14 @@ Wires the Locations into a spatial sandbox map.
 {
   actId: string
   locations: [{
-    id: string                        // Must match intendedLocations from Step 1
+    id: string                        // Must match intendedLocations
     title: string
     location: string                  // Asset key for background (= location id)
-    requiredCharacters: string[]      // Character IDs that appear
-    ambientDetail: string             // Sensory details
+    requiredCharacters: string[]
+    ambientDetail: string
     mood: string                      // Asset key for music
-    callbacks?: string[]              // Instructions for DM to re-use globalMaterials
-    connections: string[]             // Valid Location IDs player can move to
+    callbacks?: string[]
+    connections: string[]             // Location IDs player can travel to
   }]
 }
 ```
@@ -182,54 +175,58 @@ Wires the Locations into a spatial sandbox map.
 
 ---
 
-### `draftNodeBeats` — Pipeline Step 3
+### `draftNodeEncounters` — Pipeline Step 3
 
-Populates a single Location with ordered narrative beats.
+Populates a single Location with an unordered encounter pool.
 
 **Input:**
 ```typescript
 {
   actId: string
-  nodeId: string                      // Still called nodeId for legacy compat
-  beats: [{
-    description: string               // Core narrative action of this beat
+  nodeId: string                      // Location ID
+  encounters: [{
+    id: string                        // e.g. "enc_locked_drawer"
+    title: string
+    description: string               // DM instructions for narrating
+    type: 'discovery' | 'npc_interaction' | 'combat' | 'puzzle' | 'atmospheric'
     pacing: {
       expectedFrames: number
       focus: 'dialogue_and_worldbuilding' | 'standard' | 'tension_and_action'
     }
-    findings?: string[]               // Clues uncovered in this beat
-    interactables?: string[]          // Discoverable items in this beat
-    potentialFlags?: string[]         // Semantic state flags the player could earn
-    foreshadowing?: string            // Subtle hints for future beats
-  }]                                  // Min 1 beat
+    prerequisites?: string[]          // Flags required
+    excludeIfFlags?: string[]         // Skip if these flags set
+    requiredCharacters?: string[]     // NPCs needed
+    givesProgression?: number         // Increment act progression
+    potentialFlags?: string[]         // Flags player can earn
+    findings?: string[]               // Clues discovered
+    interactables?: string[]          // Items discoverable
+    priority?: 'low' | 'normal' | 'high' | 'urgent'
+    repeatable?: boolean
+  }]
 }
 ```
 
-**Returns:** `{ ok: true, updated: string, beatCount: number }`
+**Returns:** `{ ok: true, updated: string, encounterCount: number }`
 
-**Key design:** Because the LLM isn't worrying about Act-level topology (that was Step 2), it can focus purely on Steins;Gate-style subjective pacing and dialogue.
+**Key design:** Encounters are unordered — the Director selects dynamically. Design them to work in any sequence. Use `prerequisites` and `excludeIfFlags` for soft ordering.
 
 ---
 
 ### `finalizeNode` — Pipeline Step 4
 
-Generates assets for a completed Node.
+Generates assets for a completed Location.
 
 **Input:**
 ```typescript
 {
   actId: string
   nodeId: string
-  backgroundPrompt: string            // Visual prompt for background image
-  musicPrompts: [{ text, weight }]    // Weighted prompts for ambient music
+  backgroundPrompt: string
+  musicPrompts: [{ text, weight }]
 }
 ```
 
-**Returns:** `{ ok: true, nodeId, backgroundUrl, musicUrl }`
-
-**Side effects:**
-- Generates background PNG → `/public/generated/{packageId}/{location}.png`
-- Generates ambient music WAV → `/public/generated/{packageId}/{mood}.wav`
+**Returns:** `{ ok: true, id, title, backgroundUrl, musicUrl }`
 
 ---
 
@@ -241,10 +238,10 @@ Modifies any draft element after initial proposal.
 ```typescript
 {
   type: 'premise' | 'character' | 'act' | 'node'
-  actId?: string                      // Required if updating a node
-  id?: string                         // Required for character/node
-  changes: Record<string, unknown>    // Fields to merge
-  regenerateImage?: boolean           // Re-generate portrait if imagePrompt changed
+  actId?: string
+  id?: string
+  changes: Record<string, unknown>
+  regenerateImage?: boolean
 }
 ```
 
@@ -258,79 +255,28 @@ Validates and saves the complete VN package. Triggers agent loop stop.
 
 **Input:**
 ```typescript
-{ title: string }                     // Confirmed story title
+{ title: string }
 ```
 
 **Returns:** `{ ok: true, packageId, title, totalNodes }`
 
 **Side Effects:**
-1. Validates: premise exists, ≥1 act with nodes
-2. Assembles `VNPackage` with Acts → Nodes → Beats hierarchy
-3. Validates against `VNPackageSchema`
-4. Saves to `/public/generated/{packageId}/story.json`
-5. Inserts into `vnPackages` SQLite table
+1. Validates: premise exists, >= 1 act with locations + encounters
+2. Assembles `VNPackage` with Acts -> Locations -> Encounters
+3. Includes `personalArc`, `globalProgression`, `opposingForce`
+4. Validates against `VNPackageSchema`
+5. Saves to disk + SQLite
 
 ---
 
-## Output Structure
+## Encounter Design Principles
 
-### During Planning: `PlanSession.draft`
-
-```typescript
-PlanDraft {
-  premise?: {
-    title, artStyle, language,
-    setting: { world, era, tone },
-    premise, themes, globalMaterials, possibleEndings
-  }
-  characters: [{ id, name, role, description, imagePrompt, imageUrl? }]
-  acts: [{
-    id, title, objective,
-    nodes: [{
-      id, title, location, requiredCharacters, ambientDetail, mood,
-      callbacks?, beats?, connections?,
-      backgroundUrl?, musicUrl?
-    }]
-  }]
-  referenceImages: [{ data, mimeType }]
-}
-```
-
-### On Finalize: `VNPackage`
-
-See [../CLAUDE.md](../CLAUDE.md) for full schema.
-
-Key transformation: draft acts with nodes are assembled into `Act.nodes[]`, asset URLs collected into `AssetPack`, metadata (totalNodes, estimatedDuration, generationMs) computed.
-
----
-
-## Example: Steins;Gate-style Act
-
-```json
-{
-  "id": "act_1_sern",
-  "title": "Infiltrate SERN",
-  "objective": "Find the IBN-5100 hidden in the sub-basement.",
-  "nodes": [
-    {
-      "id": "node_loading_dock",
-      "title": "The Loading Dock",
-      "exitConditions": [
-        { "condition": "Player sneaks past the guards.", "nextNodeId": "node_server_room_b" },
-        { "condition": "Player is spotted or fails stealth.", "nextNodeId": "node_interrogation" }
-      ],
-      "beats": [
-        {
-          "description": "Arrive at the dimly lit loading dock. Security patrols every 90 seconds.",
-          "pacing": "2-3 atmospheric frames, then a tense decision point",
-          "interactables": ["stack of shipping crates", "security camera feed"],
-          "foreshadowing": "The crates are stamped with an unfamiliar SERN sub-division logo."
-        }
-      ]
-    }
-  ]
-}
-```
+- **No dead ends**: Every encounter should give progression, set a flag, or provide narrative value
+- **Interconnected flags**: Flag chains across locations — finding something in A unlocks encounters in B
+- **Varied pacing**: Mix dialogue_and_worldbuilding with tension_and_action at each location
+- **NPC encounters**: Use `requiredCharacters` to tie encounters to specific NPCs
+- **Repeatable encounters**: Mark atmospheric/ambient as `repeatable: true` for Director filler
+- **Progression balance**: Distribute `givesProgression` across encounters so the act's `requiredValue` is achievable through multiple paths
 
 ---
 
@@ -338,48 +284,18 @@ Key transformation: draft acts with nodes are assembled into `Act.nodes[]`, asse
 
 ```
 getOrCreatePlanSession(sessionId, locale)
-  → Creates PlanSession with UUID packageId
-  → Initializes empty draft { characters:[], acts:[] }
+  -> Creates PlanSession with UUID packageId
+  -> Initializes empty draft { characters:[], acts:[] }
 
 [Agent iterates pipeline per Act:]
-  → draftActOutline → draftNodeWeb → draftNodeBeats → finalizeNode
-  → Each tool mutates session.draft in-memory
+  -> draftActOutline -> draftNodeWeb -> draftNodeEncounters -> finalizeNode
+  -> Each tool mutates session.draft in-memory
 
 finalizePackage()
-  → Assembles VNPackage from draft (Acts → Nodes → Beats)
-  → Persists to DB + filesystem
-  → Session can be cleared via clearPlanSession()
+  -> Assembles VNPackage from draft (Acts -> Locations -> Encounters)
+  -> Includes personalArcs, globalProgression, opposingForce
+  -> Persists to DB + filesystem
+  -> Session can be cleared via clearPlanSession()
 ```
 
 **Note:** PlanSession is in-memory only (Map). Not persisted to DB. Lost on server restart.
-
----
-
-## Asset Generation
-
-| Asset Type | Generator | Output | Path |
-|-----------|-----------|--------|------|
-| Character portrait | `generateCharacterImage()` | PNG (transparent BG) | `/generated/{packageId}/{charId}.png` |
-| Node background | `generateSceneImage()` | PNG (16:9) | `/generated/{packageId}/{location}.png` |
-| Ambient music | `generateAmbientMusic()` | WAV (PCM) | `/generated/{packageId}/{mood}.wav` |
-
-Skipped when `session.bypassAssets = true` (for testing).
-
----
-
-## API Route
-
-**`POST /chat`** (`server/vn/routes/planChatRoute.ts`)
-
-```typescript
-// Request
-{ messages: UIMessage[], sessionId: string, locale?: string }
-
-// Response: SSE stream (Fastify hijack)
-```
-
-Flow:
-1. `getOrCreatePlanSession(sessionId, locale)`
-2. Extract reference images from latest user message → `session.draft.referenceImages`
-3. Create agent via `createPlanningAgent(session)`
-4. Stream response as SSE

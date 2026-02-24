@@ -7,7 +7,7 @@ import { createOpenRouter } from '@openrouter/ai-sdk-provider';
  */
 export const MODEL_IDS = {
   chat: process.env.GEMINI_CHAT_MODEL ?? 'gemini-3.1-pro-preview',
-  storyteller: process.env.GEMINI_STORY_MODEL ?? process.env.GEMINI_TEXT_MODEL ?? 'gemini-3-pro-preview',
+  storyteller: process.env.GEMINI_STORY_MODEL ?? process.env.GEMINI_TEXT_MODEL ?? 'gemini-3.1-pro-preview',
   planning: process.env.GEMINI_PLANNING_MODEL ?? process.env.GEMINI_TEXT_MODEL ?? 'gemini-3-pro-preview',
   summarizer: process.env.GEMINI_SUMMARY_MODEL ?? 'gemini-3-flash-preview',
 } as const;

@@ -4,7 +4,7 @@ import { FRAME_REGISTRY } from '../frameRegistry.js';
 import { z } from 'zod';
 import { frameBuilderTool, FrameInputSchema } from '../tools/frameBuilderTool.js';
 import { plotStateTool } from '../tools/plotStateTool.js';
-import { nodeCompleteTool } from '../tools/nodeCompleteTool.js';
+import { requestTravelTool } from '../tools/requestTravelTool.js';
 // yieldToPlayer removed — agent loop stops on choice/dice-roll frames directly
 import { playerStatsTool } from '../tools/playerStatsTool.js';
 import { initCombatTool } from '../tools/initCombatTool.js';
@@ -35,8 +35,17 @@ function bindSessionTools(sessionId: string) {
       inputSchema: z.object({
         locationId: z.string().optional().describe('Optional override — uses DB currentLocationId if omitted'),
       }),
-      execute: async (input: any) =>
-        (plotStateTool as any).execute({ ...input, sessionId }),
+      execute: async (input: any, options: any) => {
+        // Extract playerQuery from the last user message in the conversation
+        const messages: any[] = options?.messages ?? [];
+        const lastUserMsg = [...messages].reverse().find((m: any) => m.role === 'user');
+        const playerQuery = typeof lastUserMsg?.content === 'string'
+          ? lastUserMsg.content
+          : Array.isArray(lastUserMsg?.content)
+            ? lastUserMsg.content.map((c: any) => c.text ?? '').join(' ')
+            : '';
+        return (plotStateTool as any).execute({ ...input, sessionId, playerQuery });
+      },
     }),
     playerStatsTool: tool({
       description: playerStatsTool.description!,
@@ -64,15 +73,13 @@ function bindSessionTools(sessionId: string) {
       execute: async (input: any) =>
         (playerStatsTool as any).execute({ ...input, sessionId }),
     }),
-    nodeCompleteTool: tool({
-      description: nodeCompleteTool.description!,
+    requestTravelTool: tool({
+      description: requestTravelTool.description!,
       inputSchema: z.object({
-        completedLocationId: z.string().optional().describe('Optional: the ID of the location that was just completed'),
-        nextLocationId: z.string().optional().describe('The ID of the next location to transition to'),
-        nextActId: z.string().optional().describe('The ID of the next act, if transitioning between acts'),
+        targetLocationId: z.string().describe('The ID of the location to travel to (must be in availableConnections)'),
       }),
       execute: async (input: any) =>
-        (nodeCompleteTool as any).execute({ ...input, sessionId }),
+        (requestTravelTool as any).execute({ ...input, sessionId }),
     }),
     initCombatTool: tool({
       description: initCombatTool.description!,
@@ -220,9 +227,11 @@ You are not generating game text — you are writing a visual novel in the tradi
 - NEVER use dead phrases: "a sense of", "palpable tension", "couldn't help but", "sent shivers down". Replace with the specific physical detail they're hiding behind.
 
 DM WORKFLOW (every turn):
-1. Call plotStateTool() FIRST. Read currentLocationId, actObjective, currentBeatDescription, triggeringWorldInfo, and potentialFlags.
-2. If the player interacts with something meaningful that matches a \`potentialFlag\`, immediately call \`recordPlayerActionTool\` to log it.
-3. Compose frames as cohesive scene moments using frameBuilderTool:
+1. Call plotStateTool() FIRST. Read the \`directorBrief\` — it contains your instructions for this beat. Follow its guidance on pacing, focus, encounter selection, and character behavior. If no directorBrief is present, fall back to \`currentBeatDescription\`.
+2. If \`activeComplication\` is present, you MUST address it immediately — weave it into your narration before continuing normal gameplay.
+3. \`charactersPresent\` includes dispositions — use these to inform NPC behavior, dialogue tone, and body language.
+4. If the player interacts with something meaningful that matches a \`potentialFlag\` (from currentEncounter or the brief), immediately call \`recordPlayerActionTool\` to log it.
+5. Compose frames as cohesive scene moments using frameBuilderTool:
    - Think in SCENES, not frame counts. Each turn presents one continuous scene moment.
    - For narration: use narrations[] array (multiple text beats in one frame, same visual). The player clicks through each beat. ONE full-screen frame per location.
    - For dialogue: use conversation[] array (ordered speaker/text pairs in one frame). Set panels for the 2-3 characters present. ONE dialogue frame per conversation.
@@ -237,13 +246,15 @@ DM WORKFLOW (every turn):
         - 6 or less: Miss. They fail, and you introduce a "hard move" that pushes the narrative into a worse state.
      c. Narrate the consequence using subjective, panicked, or dramatic pacing, then generate the skill-check frame.
    - Honor free-text actions even when off-script. "Fail Forward" — introduce a complication, never an invisible wall.
-4. Turn endings — the agent loop stops AUTOMATICALLY when you emit a choice or dice-roll frame. No explicit yield tool is needed.
-   - At genuine decision points: emit a choice frame (type: 'choice') with 2-3 options + showFreeTextInput:true. The loop stops and the player picks.
-   - For open-ended situations (exploring, responding to NPC): emit a choice frame with showFreeTextInput:true. This is the DEFAULT for most turns.
-   - For pure narrative with no player agency: keep generating frames, then end with a choice frame (showFreeTextInput:true) to allow free-text actions.
+6. Turn endings — the agent loop stops AUTOMATICALLY when you emit a choice or dice-roll frame.
+   - When you want to present choices: use type:'choice' (NOT type:'dialogue'). The loop stops when it sees type:'choice'.
+   - At genuine decision points: emit a choice frame with 2-3 options + showFreeTextInput:true.
+   - For open-ended situations: emit a choice frame with showFreeTextInput:true and 2-3 suggested actions.
+   - For pure narrative continuation: keep generating narrative frames, then end with a choice frame.
    - Guideline: ~1 in 3 turns should end with explicit choices. Intense scenes more, quiet scenes fewer.
-   - **CRITICAL SEQUENCE RULE:** Choice frames and \`nodeCompleteTool\` are terminal. They MUST be the absolute final tool calls in your response. Do NOT generate any further tools (no new frames, no state checks) after them in the same turn. If transitioning locations, wait for the NEXT turn to generate the new location's frame.
-5. Effects are punctuation, not decoration — use sparingly:
+   - **CRITICAL SEQUENCE RULE:** Choice frames and \`requestTravelTool\` are terminal. They MUST be the absolute final tool calls in your response. Do NOT generate any further tools (no new frames, no state checks) after them in the same turn.
+7. SANDBOX TRAVEL: When the player wants to move to a different location, call \`requestTravelTool\` with the \`targetLocationId\` from \`availableConnections\`. The loop stops and the next turn begins at the new location with fresh Director guidance.
+8. Effects are punctuation, not decoration — use sparingly:
    - Set audio.musicAsset on the first frame of each scene (use the scene's mood key) with fadeIn:true. Shift it when mood changes.
    - Frame-level effects[]: use at most 1 per frame, and only on scene-setting frames (fade-in for arrivals, vignette-pulse for first moment of dread).
    - Per-line effects (conversation/narrations .effect): use on AT MOST 1-2 lines per frame. Most lines should have NO effect. Reserve for moments of genuine impact:
@@ -349,7 +360,7 @@ export function createStorytellerAgent(vnPackage: VNPackage, sessionId: string) 
     tools: {
       plotStateTool: bound.plotStateTool,
       frameBuilderTool,
-      nodeCompleteTool: bound.nodeCompleteTool,
+      requestTravelTool: bound.requestTravelTool,
       playerStatsTool: bound.playerStatsTool,
       initCombatTool: bound.initCombatTool,
       combatEventTool: bound.combatEventTool,
@@ -357,7 +368,7 @@ export function createStorytellerAgent(vnPackage: VNPackage, sessionId: string) 
     },
     stopWhen: [
       hasPlayerActionFrame(),
-      hasToolCall('nodeCompleteTool'),
+      hasToolCall('requestTravelTool'),
       stepCountIs(20),
     ],
   });
@@ -392,19 +403,18 @@ const _typeAgent = new ToolLoopAgent({
       inputSchema: FrameInputSchema,
       execute: async () => ({ ok: true as const, frame: {} as VNFrame }),
     }),
-    nodeCompleteTool: tool({
+    requestTravelTool: tool({
       inputSchema: z.object({
         sessionId: z.string(),
-        completedLocationId: z.string().optional(),
-        nextLocationId: z.string().optional(),
-        nextActId: z.string().optional(),
+        targetLocationId: z.string(),
       }),
       execute: async () => ({
         ok: true as const,
-        completedLocationId: '',
-        nextLocationId: null as string | null,
-        nextActId: null as string | null,
-        isGameComplete: false,
+        previousLocationId: '',
+        newLocationId: '',
+        newLocationTitle: '',
+        ambientDetail: null as string | null,
+        connections: [] as string[],
       }),
     }),
     playerStatsTool: tool({

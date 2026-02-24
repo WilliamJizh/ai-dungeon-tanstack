@@ -13,9 +13,10 @@ interface ToolCallWidgetProps {
 const TOOL_LABELS: Record<string, string> = {
   'tool-proposeStoryPremise': '⚙ Story Premise',
   'tool-proposeCharacter': '⚙ Character',
-  'tool-draftNodeOutline': '⚙ Node Outline',
-  'tool-draftNodeBeats': '⚙ Node Beats',
-  'tool-finalizeNode': '⚙ Finalize Node',
+  'tool-draftActOutline': '⚙ Act Outline',
+  'tool-draftNodeWeb': '⚙ Location Web',
+  'tool-draftNodeEncounters': '⚙ Encounters',
+  'tool-finalizeNode': '⚙ Finalize Location',
   'tool-updateElement': '⚙ Update',
   'tool-finalizePackage': '⚙ Finalize Package',
   'dynamic-tool': '🔍 Search',
@@ -107,28 +108,32 @@ function NodeToolWidget({ part }: { part: Part }) {
   const toolCall = { toolName: part.type, args: part.input as any };
 
   switch (toolCall.toolName) {
-    case 'tool-draftNodeOutline':
+    case 'tool-draftActOutline':
       return (
         <>
-          <div style={{ fontSize: 14, color: '#fff', marginBottom: 2 }}>Drafting Node Outline: {toolCall.args.title}</div>
+          <div style={{ fontSize: 14, color: '#fff', marginBottom: 2 }}>Act Outline: {toolCall.args.title}</div>
           <div style={{ fontSize: 12, color: 'rgba(255,255,255,.5)' }}>ID: {toolCall.args.id}</div>
         </>
       );
-    case 'tool-draftNodeBeats':
+    case 'tool-draftNodeWeb':
       return (
         <>
-          <div style={{ fontSize: 14, color: '#fff', marginBottom: 2 }}>Drafting Beats for Node: {toolCall.args.nodeId}</div>
-          <div style={{ fontSize: 12, color: 'rgba(255,255,255,.5)' }}>Beats: {toolCall.args.beats.length}</div>
+          <div style={{ fontSize: 14, color: '#fff', marginBottom: 2 }}>Wiring Location Sandbox</div>
+          <div style={{ fontSize: 12, color: 'rgba(255,255,255,.5)' }}>Locations: {toolCall.args.locations?.length ?? 0}</div>
+        </>
+      );
+    case 'tool-draftNodeEncounters':
+      return (
+        <>
+          <div style={{ fontSize: 14, color: '#fff', marginBottom: 2 }}>Encounters for: {toolCall.args.nodeId}</div>
+          <div style={{ fontSize: 12, color: 'rgba(255,255,255,.5)' }}>Encounters: {toolCall.args.encounters?.length ?? 0}</div>
         </>
       );
     case 'tool-finalizeNode':
       return (
         <>
-          <div style={{ fontSize: 14, color: '#fff', marginBottom: 2 }}>Finalizing Node: {toolCall.args.nodeId}</div>
+          <div style={{ fontSize: 14, color: '#fff', marginBottom: 2 }}>Finalizing Location: {toolCall.args.nodeId}</div>
           <div style={{ fontSize: 12, color: 'rgba(255,255,255,.5)' }}>Generating assets...</div>
-          {toolCall.toolName === 'tool-finalizeNode' && (
-            <div>Generates Image & Audio</div>
-          )}
         </>
       );
     default:
@@ -213,7 +218,7 @@ export function ToolCallWidget({ part }: ToolCallWidgetProps) {
 
       {part.type === 'tool-proposeStoryPremise' && <ProposeStoryPremiseWidget part={part} />}
       {part.type === 'tool-proposeCharacter' && <ProposeCharacterWidget part={part} />}
-      {(part.type === 'tool-draftNodeOutline' || part.type === 'tool-draftNodeBeats' || part.type === 'tool-finalizeNode') && <NodeToolWidget part={part} />}
+      {(part.type === 'tool-draftActOutline' || part.type === 'tool-draftNodeWeb' || part.type === 'tool-draftNodeEncounters' || part.type === 'tool-finalizeNode') && <NodeToolWidget part={part} />}
       {part.type === 'tool-finalizePackage' && <FinalizePackageWidget part={part} />}
       {part.type === 'tool-updateElement' && <GenericToolWidget part={part} />}
     </div>

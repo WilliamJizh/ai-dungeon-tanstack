@@ -305,6 +305,12 @@ export const frameBuilderTool = tool({
         };
       }
 
+      // Auto-coerce: if a non-choice frame has choices[], upgrade type to 'choice'
+      // This ensures the stop condition fires immediately instead of retrying
+      if (normalized.type !== 'choice' && normalized.choices && normalized.choices.length > 0) {
+        normalized.type = 'choice';
+      }
+
       const parsed = VNFrameSchema.safeParse(normalized);
       if (parsed.success) {
         return { ok: true as const, frame: parsed.data as VNFrame };

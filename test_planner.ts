@@ -34,8 +34,8 @@ function logToolResults(steps: any[], label: string): number {
                 console.log(`    ✓ draftActOutline: ${out.title} (${out.id})`);
             } else if (tr.toolName === 'draftNodeWeb') {
                 console.log(`    ✓ draftNodeWeb: wired ${out.updatedNodes} locations`);
-            } else if (tr.toolName === 'draftNodeBeats') {
-                console.log(`    ✓ draftNodeBeats: added beats to ${out.updated}`);
+            } else if (tr.toolName === 'draftNodeEncounters') {
+                console.log(`    ✓ draftNodeEncounters: added ${out.encounterCount} encounters to ${out.updated}`);
             } else if (tr.toolName === 'finalizeNode') {
                 console.log(`    ✓ finalizeNode: generated assets for ${out.id}`);
             } else if (tr.toolName === 'finalizePackage') {
@@ -129,15 +129,28 @@ ${langRule}`);
 2. A key ally
 3. A supporting NPC
 4. An antagonist/villain
-Each must have detailed descriptions with PbtA stats. ${langRule}`);
+Each must have detailed descriptions with PbtA stats (Charm, Logic, Athletics, Perception, Willpower: -1 to +3).
+For the ally and antagonist, include a personalArc with want, need, and 2-4 arcEncounters spanning introduction→development→crisis→resolution phases.
+${langRule}`);
 
         // ── Phase 3-6: Acts 1-4 ─────────────────────────────────────────
         for (let actNum = 1; actNum <= 4; actNum++) {
-            const locCount = actNum <= 2 ? '3' : '2';
+            const locCount = actNum <= 2 ? '3-4' : actNum === 3 ? '2' : '1-2';
+            const progressionHint = actNum <= 2
+                ? `Include globalProgression (tracker + requiredValue) and opposingForce (doom clock with 2-3 escalation events).`
+                : actNum === 3
+                    ? `Include a tight opposingForce doom clock.`
+                    : '';
             await step(`Act ${actNum}`, `Now generate Act ${actNum} of 4. Do the following in order:
-1. draftActOutline — define objective, scenarioContext, inevitableEvents, scenarioWorldInfo (at least 2 entries), and ${locCount} intendedLocations
+1. draftActOutline — define objective, scenarioContext, narrativeGuidelines, inevitableEvents, scenarioWorldInfo (at least 2 entries), and ${locCount} intendedLocations. ${progressionHint}
 2. draftNodeWeb — connect the locations with rich 2-3 sentence ambientDetail for each
-3. draftNodeBeats — for EACH location, write 2-3 detailed beats with vivid 3-5 sentence descriptions, findings (as {id, detail} objects), and interactables (as {id, detail} objects)
+3. draftNodeEncounters — for EACH location, populate 3-6 unordered encounters with:
+   - Varied types (discovery, npc_interaction, combat, puzzle, atmospheric)
+   - prerequisites/excludeIfFlags for flag-chain branching across locations
+   - givesProgression on encounters that advance the act objective
+   - potentialFlags that unlock encounters elsewhere
+   - priority levels (urgent encounters surface first)
+   - Mark ambient encounters as repeatable: true
 ${langRule}`);
         }
 

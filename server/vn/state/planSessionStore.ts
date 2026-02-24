@@ -20,16 +20,30 @@ export interface PlanDraftCharacter {
   imagePrompt: string;
   imageUrl?: string;
   imageMimeType?: string;
+  personalArc?: {
+    want: string;
+    need: string;
+    arcEncounters: PlanDraftEncounter[];
+  };
 }
 
-export interface PlanDraftBeat {
-  id?: string;
+export interface PlanDraftEncounter {
+  id: string;
+  title: string;
   description: string;
+  type: 'discovery' | 'npc_interaction' | 'combat' | 'puzzle' | 'atmospheric';
   pacing: { expectedFrames: number; focus: 'dialogue_and_worldbuilding' | 'standard' | 'tension_and_action' };
+  prerequisites?: string[];
+  excludeIfFlags?: string[];
+  requiredCharacters?: string[];
+  givesProgression?: number;
+  potentialFlags?: string[];
   findings?: string[];
   interactables?: string[];
-  potentialFlags?: string[];
-  foreshadowing?: string;
+  arcCharacterId?: string;
+  arcPhase?: 'introduction' | 'development' | 'crisis' | 'resolution';
+  priority?: 'low' | 'normal' | 'high' | 'urgent';
+  repeatable?: boolean;
 }
 
 export interface PlanDraftNode {
@@ -38,7 +52,7 @@ export interface PlanDraftNode {
   location: string;
   requiredCharacters: string[];
   ambientDetail?: string;
-  beats: PlanDraftBeat[];
+  encounters: PlanDraftEncounter[];
   callbacks?: string[];
   connections: string[];
   mood: string;
@@ -62,6 +76,15 @@ export interface PlanDraftAct {
     conditionalBranches?: { condition: string; effect: string }[];
   }[];
   scenarioWorldInfo?: { id: string; keys: string[]; content: string; type: 'lore' | 'entity' | 'atmosphere' }[];
+  globalProgression?: {
+    requiredValue: number;
+    trackerLabel: string;
+  };
+  opposingForce?: {
+    trackerLabel: string;
+    requiredValue: number;
+    escalationEvents: { threshold: number; description: string }[];
+  };
   nodes: PlanDraftNode[];
 }
 

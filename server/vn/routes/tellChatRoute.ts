@@ -45,8 +45,16 @@ function initPlotStateIfNeeded(sessionId: string, packageId: string, vnPackage: 
     currentBeat: 0,
     offPathTurns: 0,
     completedLocations: '[]',
-    playerStatsJson: '{}', // starting inventory/skills
-    flagsJson: '{}',       // starting flags
+    playerStatsJson: '{}',
+    flagsJson: '{}',
+    turnCount: 0,
+    globalProgression: 0,
+    opposingForceJson: JSON.stringify({ currentTick: 0, escalationHistory: [] }),
+    characterStatesJson: '{}',
+    activeComplicationJson: 'null',
+    exhaustedEncountersJson: '[]',
+    injectedEncountersJson: '{}',
+    directorNotesJson: '{}',
     updatedAt: new Date().toISOString()
   }).run();
 }
@@ -131,6 +139,15 @@ export async function tellChatRoute(app: FastifyInstance) {
     pump()
       .then(() => {
         finishTrace('success');
+
+        // Increment turn count
+        const currentState = db.select({ turnCount: plotStates.turnCount }).from(plotStates).where(eq(plotStates.sessionId, sessionId)).get();
+        if (currentState) {
+          db.update(plotStates)
+            .set({ turnCount: (currentState.turnCount ?? 0) + 1 })
+            .where(eq(plotStates.sessionId, sessionId))
+            .run();
+        }
 
         // After the stream finishes, check if the location changed during this turn
         if (preTurnState) {
