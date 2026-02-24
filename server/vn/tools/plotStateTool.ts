@@ -110,7 +110,11 @@ function loadPlotState(row: any): PlotState {
     updatedAt: row.updatedAt,
     turnCount: row.turnCount ?? 0,
     globalProgression: row.globalProgression ?? 0,
-    opposingForce: parseJsonCol<OpposingForceState>(row.opposingForceJson, { currentTick: 0, escalationHistory: [] }),
+    opposingForce: {
+      currentTick: 0,
+      escalationHistory: [],
+      ...parseJsonCol<Partial<OpposingForceState>>(row.opposingForceJson, {}),
+    },
     characterStates: parseJsonCol<Record<string, CharacterState>>(row.characterStatesJson, {}),
     activeComplication: parseJsonCol<ActiveComplication | null>(row.activeComplicationJson, null),
     exhaustedEncounters: parseJsonCol<string[]>(row.exhaustedEncountersJson, []),

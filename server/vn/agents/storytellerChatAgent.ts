@@ -60,9 +60,14 @@ function bindSessionTools(sessionId: string) {
           return { _cached: true, _hint: 'Context already loaded this turn. Produce frames with frameBuilderTool, or call requestTravelTool to move.' };
         }
 
-        const result = await (plotStateTool as any).execute({ ...input, sessionId, playerQuery });
-        cachedPlotResult = result;
-        return result;
+        try {
+          const result = await (plotStateTool as any).execute({ ...input, sessionId, playerQuery });
+          cachedPlotResult = result;
+          return result;
+        } catch (execErr: any) {
+          console.error(`[plotStateTool] Execute error:`, execErr?.message);
+          return { error: String(execErr?.message ?? 'plotStateTool failed'), directorBrief: 'Continue the scene naturally.' };
+        }
       },
     }),
     playerStatsTool: tool({

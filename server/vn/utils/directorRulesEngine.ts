@@ -65,9 +65,10 @@ export function evaluateRules(
     }
 
     // Check if we just crossed an escalation threshold
+    const history = state.opposingForce.escalationHistory ?? [];
     for (const event of escalationEvents) {
       const justCrossed = tick >= event.threshold &&
-        !state.opposingForce.escalationHistory.includes(`threshold_${event.threshold}`);
+        !history.includes(`threshold_${event.threshold}`);
       if (justCrossed) {
         needsDirector = true;
         reasons.push(`escalation threshold crossed: ${event.threshold}`);
