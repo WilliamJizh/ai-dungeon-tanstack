@@ -449,7 +449,7 @@ async function run() {
                         for await (const event of result.fullStream) {
                             if (event.type === 'tool-result') {
                                 const toolOutput = event.output as any;
-                                if (event.toolName === 'frameBuilderTool' && toolOutput?.ok) {
+                                if (event.toolName === 'frameBuilderTool') {
                                     totalFrames++;
                                     if (totalFrames >= MAX_FRAMES_PER_TURN) {
                                         console.log(`\n[Safety] Max frames per turn (${MAX_FRAMES_PER_TURN}) reached — truncating`);

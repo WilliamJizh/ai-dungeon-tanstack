@@ -389,6 +389,45 @@ export const plotStateTool = tool({
           ?? 'Continue the current scene naturally. Follow the player\'s lead.';
       }
 
+      // ── Hard fallback (OUTSIDE Director try-catch so it always runs) ──
+      // If progression is stalled after 15+ turns regardless of Director success/failure,
+      // auto-award +1 to prevent infinite loops.
+      {
+        const requiredProg = act.globalProgression?.requiredValue ?? Infinity;
+        if (state.globalProgression < requiredProg && state.turnCount >= 15) {
+          console.log(`[PlotState] Stale progression fallback: auto-awarding +1 at turn ${state.turnCount} (${state.globalProgression}/${requiredProg})`);
+          state.globalProgression += 1;
+          db.update(plotStates)
+            .set({ globalProgression: state.globalProgression })
+            .where(eq(plotStates.sessionId, sessionId))
+            .run();
+
+          // Check if this pushes past the act threshold
+          if (state.globalProgression >= requiredProg) {
+            const actIdx = pkg.plot.acts.findIndex(a => a.id === act.id);
+            const nextAct = actIdx >= 0 && actIdx + 1 < pkg.plot.acts.length
+              ? pkg.plot.acts[actIdx + 1] : null;
+
+            if (nextAct) {
+              const nextLoc = nextAct.sandboxLocations?.[0];
+              console.log(`[PlotState] FALLBACK ACT ADVANCE: "${act.title}" → "${nextAct.title}"`);
+              const actAdvance: Record<string, any> = {
+                currentActId: nextAct.id, currentBeat: 0, offPathTurns: 0,
+                globalProgression: 0,
+              };
+              const completedLocs = [...state.completedLocations];
+              if (!completedLocs.includes(state.currentLocationId)) completedLocs.push(state.currentLocationId);
+              actAdvance.completedLocations = JSON.stringify(completedLocs);
+              if (nextLoc) actAdvance.currentLocationId = nextLoc.id;
+              db.update(plotStates).set(actAdvance).where(eq(plotStates.sessionId, sessionId)).run();
+
+              const transitionNote = `\n🔄 ACT TRANSITION: "${act.title}" is COMPLETE. Narrate a climactic conclusion. The next act is "${nextAct.title}" — objective: ${nextAct.objective}.`;
+              directorBrief = transitionNote + '\n\n' + directorBrief;
+            }
+          }
+        }
+      }
+
       // Find suggested encounter
       const suggestedEncounter = suggestedEncounterId
         ? availableEncounters.find(e => e.id === suggestedEncounterId) ?? null
