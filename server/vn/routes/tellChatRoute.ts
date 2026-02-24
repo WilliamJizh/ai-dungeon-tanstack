@@ -5,7 +5,7 @@ import { plotStates, vnPackages } from '../../db/schema.js';
 import { eq } from 'drizzle-orm';
 import { createStorytellerAgent } from '../agents/storytellerChatAgent.js';
 import { vnPackageStore } from '../state/vnPackageStore.js';
-import { startLLMTrace, getActiveModelInfo } from '../../lib/modelFactory.js';
+import { startLLMTrace, getActiveModelInfo, downgradeModel, isQuotaOrRateLimitError } from '../../lib/modelFactory.js';
 import { compressContext, summarizeNodeInBackground, sanitizeHistory } from '../utils/contextCompressor.js';
 import type { VNPackage } from '../types/vnTypes.js';
 
@@ -97,7 +97,7 @@ export async function tellChatRoute(app: FastifyInstance) {
     const uiMessagesToProcess = sanitizeHistory(uiMessages as any[]);
     const compressedMessages = await compressContext(uiMessagesToProcess, sessionId, preTurnState?.storySummary || '');
 
-    const agent = createStorytellerAgent(vnPackage, sessionId);
+    let agent = createStorytellerAgent(vnPackage, sessionId);
     const { provider, modelId } = getActiveModelInfo('storyteller');
     const { traceId, onStepFinish, finishTrace } = startLLMTrace({
       sessionId, requestId: req.id,
@@ -108,12 +108,32 @@ export async function tellChatRoute(app: FastifyInstance) {
 
     req.log.info({ traceId }, '[VN tell/chat] trace started');
 
-    let response: Response;
-    try {
-      response = await createAgentUIStreamResponse({ agent, uiMessages: compressedMessages, onStepFinish });
-    } catch (err) {
-      finishTrace('error', err);
-      req.log.error({ err }, '[VN tell/chat] agent init error');
+    let response!: Response;
+    let lastErr: unknown;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        response = await createAgentUIStreamResponse({ agent, uiMessages: compressedMessages, onStepFinish });
+        lastErr = null;
+        break;
+      } catch (err) {
+        lastErr = err;
+        const errName = (err as any)?.name ?? '';
+        if (isQuotaOrRateLimitError(err)) {
+          req.log.warn({ attempt, err }, '[VN tell/chat] quota/rate-limit error, downgrading model...');
+          downgradeModel('storyteller');
+          agent = createStorytellerAgent(vnPackage, sessionId);
+          continue;
+        }
+        if (errName === 'AI_NoOutputGeneratedError' && attempt < 2) {
+          req.log.warn({ attempt, err }, '[VN tell/chat] transient empty response, retrying...');
+          continue;
+        }
+        break;
+      }
+    }
+    if (lastErr) {
+      finishTrace('error', lastErr);
+      req.log.error({ err: lastErr }, '[VN tell/chat] agent error after retries');
       return reply.status(500).send({ error: 'Agent initialization failed' });
     }
 

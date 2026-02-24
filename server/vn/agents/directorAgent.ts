@@ -163,7 +163,7 @@ Evaluate the player's action in context. Then produce a JSON response with:
    - Whether to inject complication pressure
 
 2. **stateMutations** (object): State changes to apply:
-   - progressionDelta: number (0 if no progress, +1 if clue found, etc.)
+   - progressionDelta: number — IMPORTANT: Award +1 whenever the player completes an encounter that has [+N progression], solves a puzzle, obtains a key item, or reaches a major story milestone. Do NOT be conservative — if the player's action clearly advances the plot, award progression. The story cannot move to the next act until progression reaches the required value. Currently at ${currentState.globalProgression}/${currentAct.globalProgression?.requiredValue ?? '?'}.
    - doomClockDelta: number (0 normally, +1 if player wasted time or made noise)
    - characterUpdates: array of { characterId, disposition?, newLocationId? }
    - setComplication: { description, maxTurns } or null to clear

@@ -8,13 +8,40 @@ import { stdin as input, stdout as output } from 'node:process';
 import { createStorytellerAgent } from './server/vn/agents/storytellerChatAgent.js';
 import type { VNPackage } from './server/vn/types/vnTypes.js';
 import { compressContext, summarizeNodeInBackground, sanitizeHistory } from './server/vn/utils/contextCompressor.js';
-import { startLLMTrace, getActiveModelInfo } from './server/lib/modelFactory.js';
+import { startLLMTrace, getActiveModelInfo, downgradeModel, isQuotaOrRateLimitError } from './server/lib/modelFactory.js';
+import { writeFileSync, appendFileSync, existsSync } from 'node:fs';
 
 // Get the package ID or session ID from the args
 const cliArgs = process.argv.slice(2);
-const argId = cliArgs[0] || 'e527a879-ef93-41b3-958c-b7540ae0bc47';
+const argId = cliArgs.find(a => !a.startsWith('--')) || 'e527a879-ef93-41b3-958c-b7540ae0bc47';
+const AUTO_MODE = cliArgs.includes('--auto');
+const MAX_AUTO_TURNS = parseInt(cliArgs.find(a => a.startsWith('--max-turns='))?.split('=')[1] || '200');
+const LOG_FILE = `playtest_log_${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.md`;
+
+// Auto-play action pool — varied actions to simulate real player behavior
+const AUTO_ACTIONS = [
+    'Look around carefully and investigate the surroundings',
+    'Talk to the nearest person',
+    'Move forward and explore deeper',
+    'Examine the most interesting object nearby',
+    'Ask about what just happened',
+    'Try to find a clue or hint',
+    'Follow the sound or movement',
+    'Check for any hidden paths or secrets',
+];
+let autoActionIdx = 0;
+
+function log(text: string) {
+    if (AUTO_MODE) {
+        appendFileSync(LOG_FILE, text + '\n');
+    }
+}
 
 async function run() {
+    if (AUTO_MODE) {
+        console.log(`\n[AUTO-PLAY MODE] Max turns: ${MAX_AUTO_TURNS}, Log: ${LOG_FILE}`);
+        writeFileSync(LOG_FILE, `# Playtest Log\n\nStarted: ${new Date().toISOString()}\nMode: AUTO-PLAY\nMax turns: ${MAX_AUTO_TURNS}\n\n---\n\n`);
+    }
     console.log(`\nInitializing Storyteller (DM)...`);
 
     let packageId = argId;
@@ -68,15 +95,21 @@ async function run() {
     }
 
     // 3. Create the real ToolLoopAgent — this runs the full loop with tool execution + schema validation
-    const agent = createStorytellerAgent(vnPackage, sessionId);
-    const rl = readline.createInterface({ input, output });
+    let agent = createStorytellerAgent(vnPackage, sessionId);
+    const rl = AUTO_MODE ? null : readline.createInterface({ input, output });
 
     console.log('----------------------------------------------------');
     console.log(`Adventure: ${vnPackage.title}`);
+    console.log(`Session: ${sessionId}`);
     console.log('----------------------------------------------------');
+
+    if (AUTO_MODE) {
+        log(`## Session Info\n- Package: ${vnPackage.title}\n- Session: ${sessionId}\n- Package ID: ${packageId}\n\n---\n`);
+    }
 
     let keepPlaying = true;
     let messages: any[] = [];
+    let turnNumber = 0;
 
     if (isResuming && existingSession) {
         const flags = JSON.parse(existingSession.flagsJson || '{}');
@@ -118,7 +151,26 @@ async function run() {
     let frameCount = 1;
 
     while (keepPlaying) {
-        console.log('\n[DM is thinking...]\n');
+        turnNumber++;
+        if (AUTO_MODE && turnNumber > MAX_AUTO_TURNS) {
+            console.log(`\n[AUTO-PLAY] Max turns (${MAX_AUTO_TURNS}) reached. Stopping.`);
+            log(`\n---\n\n## Auto-play stopped at turn ${turnNumber} (max turns reached)\n`);
+            break;
+        }
+        console.log(`\n[Turn ${turnNumber} — DM is thinking...]\n`);
+        if (AUTO_MODE) {
+            // Log turn header with DB state
+            const dbState = db.select().from(plotStates).where(eq(plotStates.sessionId, sessionId)).get();
+            const flags = JSON.parse(dbState?.flagsJson || '{}');
+            const flagCount = Object.keys(flags).length;
+            log(`\n### Turn ${turnNumber}\n`);
+            log(`- Act: ${dbState?.currentActId || '?'}`);
+            log(`- Location: ${dbState?.currentLocationId || '?'}`);
+            log(`- Progression: ${dbState?.globalProgression || 0}`);
+            log(`- Turn Count (DB): ${dbState?.turnCount || 0}`);
+            log(`- Flags (${flagCount}): ${flagCount > 0 ? JSON.stringify(flags) : 'none'}`);
+            log('');
+        }
 
         const preTurnState = db.select({ currentLocationId: plotStates.currentLocationId, storySummary: plotStates.storySummary }).from(plotStates).where(eq(plotStates.sessionId, sessionId)).get();
         let compressedMessages = await compressContext(messages, sessionId, preTurnState?.storySummary || '') as any[];
@@ -140,6 +192,7 @@ async function run() {
             let lastFrameType: string = '';
             let options: any[] = [];
             let lastDiceRoll: any = null;
+            let lastInvestigationHotspots: any[] = [];
             let gameComplete = false;
 
             // Render a single tool result — called from fullStream for real-time output
@@ -149,7 +202,24 @@ async function run() {
                     const type = frame.type || toolInput?.type || 'unknown';
                     lastFrameType = type;
 
-                    console.log(`\n🎞️  [Frame ${frameCount++}: ${type}]`);
+                    const frameNum = frameCount++;
+                    console.log(`\n🎞️  [Frame ${frameNum}: ${type}]`);
+
+                    // Auto-mode: log frame summary
+                    if (AUTO_MODE) {
+                        const narrations = frame.narrations ?? toolInput?.narrations ?? [];
+                        const conversation = frame.conversation ?? toolInput?.conversation ?? [];
+                        const choices = frame.choices ?? toolInput?.choices ?? [];
+                        const narText = narrations.map((n: any) => n.text).join(' ');
+                        const convText = conversation.map((c: any) => c.isNarrator ? `*${c.text}*` : `**${c.speaker}**: "${c.text}"`).join('\n  - ');
+                        const choiceText = choices.map((c: any, i: number) => `  ${i + 1}. ${c.text}`).join('\n');
+
+                        log(`**Frame ${frameNum}** (${type})`);
+                        if (narText) log(`> ${narText.slice(0, 300)}${narText.length > 300 ? '...' : ''}`);
+                        if (convText) log(`  - ${convText.slice(0, 400)}${convText.length > 400 ? '...' : ''}`);
+                        if (choiceText) log(`Choices:\n${choiceText}`);
+                        log('');
+                    }
 
                     // Show panels / assets
                     const panels = frame.panels ?? toolInput?.panels ?? [];
@@ -237,6 +307,7 @@ async function run() {
                     // Show investigation
                     const invData = frame.investigationData ?? toolInput?.investigationData;
                     if (invData && Array.isArray(invData.hotspots)) {
+                        lastInvestigationHotspots = invData.hotspots;
                         console.log(`\n   🔍 [INVESTIGATION SCENE]`);
                         invData.hotspots.forEach((h: any, i: number) => {
                             console.log(`      - ${h.label} (ID: ${h.id})`);
@@ -331,44 +402,124 @@ async function run() {
                     lastFrameType = '';
                     options = [];
                     lastDiceRoll = null;
+                    lastInvestigationHotspots = [];
 
-                    const result = await agent.stream({
-                        messages: compressedMessages,
-                        onStepFinish: traceOnStepFinish,
-                        timeout: 120_000,
-                    });
-
-                    // Consume fullStream — tool-result events fire immediately per-tool,
-                    // giving real-time frame rendering instead of waiting for all steps.
-                    for await (const event of result.fullStream) {
-                        if (event.type === 'tool-result') {
-                            const toolOutput = event.output as any;
-                            if (event.toolName === 'frameBuilderTool' && toolOutput?.ok) {
-                                totalFrames++;
+                    let result: any;
+                    let streamTimedOut = false;
+                    for (let attempt = 0; attempt < 3; attempt++) {
+                        try {
+                            result = await agent.stream({
+                                messages: compressedMessages,
+                                onStepFinish: traceOnStepFinish,
+                                timeout: 120_000,
+                            });
+                            break;
+                        } catch (retryErr: any) {
+                            if (isQuotaOrRateLimitError(retryErr)) {
+                                console.log(`\n[Quota/rate-limit error, downgrading model...]`);
+                                downgradeModel('storyteller');
+                                agent = createStorytellerAgent(vnPackage, sessionId);
+                                continue;
                             }
-                            renderToolResult(event.toolName, (event as any).input, event.output);
+                            if (retryErr?.name === 'AI_NoOutputGeneratedError' && attempt < 2) {
+                                console.log(`\n[Transient empty response, retry ${attempt + 1}/2...]`);
+                                continue;
+                            }
+                            const errMsg = String(retryErr?.message ?? '');
+                            if ((retryErr?.name === 'TimeoutError' || errMsg.includes('timeout') || errMsg.includes('aborted')) && attempt < 2) {
+                                console.log(`\n[Connection timed out at attempt ${attempt + 1}, downgrading model...]`);
+                                downgradeModel('storyteller');
+                                agent = createStorytellerAgent(vnPackage, sessionId);
+                                continue;
+                            }
+                            throw retryErr;
                         }
                     }
 
-                    // Stream fully consumed — promises resolve immediately
-                    const text = await result.text;
-                    if (text && text.trim()) {
-                        console.log(`\n💬 [DM Text]:\n${text}`);
+                    // Consume fullStream with timeout protection — if stream stalls
+                    // mid-turn (Gemini hang), we gracefully continue with partial results.
+                    try {
+                        for await (const event of result.fullStream) {
+                            if (event.type === 'tool-result') {
+                                const toolOutput = event.output as any;
+                                if (event.toolName === 'frameBuilderTool' && toolOutput?.ok) {
+                                    totalFrames++;
+                                }
+                                renderToolResult(event.toolName, (event as any).input, event.output);
+                            }
+                        }
+                    } catch (streamErr: any) {
+                        const errMsg = String(streamErr?.message ?? '');
+                        const isTimeout = streamErr?.name === 'TimeoutError'
+                            || errMsg.includes('timeout')
+                            || errMsg.includes('aborted');
+                        if (isTimeout) {
+                            console.log(`\n[Stream stalled after ${totalFrames} frames — treating as partial turn]`);
+                            if (AUTO_MODE) log(`**Stream timeout** after ${totalFrames} frames\n`);
+                            streamTimedOut = true;
+                        } else {
+                            throw streamErr;
+                        }
                     }
 
-                    // Append response messages to conversation history
-                    const resp = await result.response;
-                    const appendRaw = resp.messages as any[];
-                    const combined = [...messages, ...appendRaw];
-                    messages = sanitizeHistory(combined);
+                    // Only consume text/response if stream completed normally
+                    if (!streamTimedOut) {
+                        const text = await result.text;
+                        if (text && text.trim()) {
+                            console.log(`\n💬 [DM Text]:\n${text}`);
+                        }
 
-                    if (gameComplete) {
+                        const resp = await result.response;
+                        const appendRaw = resp.messages as any[];
+                        const combined = [...messages, ...appendRaw];
+                        messages = sanitizeHistory(combined);
+                    } else {
+                        // Try to salvage partial response for history continuity
+                        try {
+                            const resp = await Promise.race([
+                                result.response,
+                                new Promise((_, reject) => setTimeout(() => reject(new Error('response timeout')), 5_000)),
+                            ]) as any;
+                            const appendRaw = resp.messages as any[];
+                            if (appendRaw?.length > 0) {
+                                messages = sanitizeHistory([...messages, ...appendRaw]);
+                                console.log(`[Salvaged ${appendRaw.length} messages from partial response]`);
+                            }
+                        } catch {
+                            // Response not available — messages stay as-is
+                        }
+                    }
+
+                    if (streamTimedOut) {
+                        if (totalFrames > 0) {
+                            // Got frames before timeout — accept partial turn
+                            console.log(`[Continuing with ${totalFrames} frames from partial response]`);
+                            diceLoop = false;
+                        } else {
+                            // No frames — downgrade model and retry
+                            const newModel = downgradeModel('storyteller');
+                            if (newModel) {
+                                console.log(`\n[Retrying with ${newModel}...]`);
+                                agent = createStorytellerAgent(vnPackage, sessionId);
+                                continue;
+                            } else {
+                                console.log(`\n[All model fallbacks exhausted]`);
+                                keepPlaying = false;
+                                diceLoop = false;
+                            }
+                        }
+                    } else if (gameComplete) {
                         keepPlaying = false;
                         diceLoop = false;
+                        if (AUTO_MODE) log(`\n---\n\n## GAME COMPLETE at Turn ${turnNumber}\n`);
                     } else if (lastFrameType === 'dice-roll') {
                         // Dice roll frame — player presses Enter, we compute the result
-                        try { await rl.question('\n🎲 [Press Enter to roll...]'); }
-                        catch { keepPlaying = false; break; }
+                        if (!AUTO_MODE) {
+                            try { await rl!.question('\n🎲 [Press Enter to roll...]'); }
+                            catch { keepPlaying = false; break; }
+                        } else {
+                            console.log('\n🎲 [AUTO: Rolling dice...]');
+                        }
 
                         const notation = lastDiceRoll?.diceNotation ?? '1d20';
                         const match = notation.match(/(\d+)d(\d+)/);
@@ -376,10 +527,20 @@ async function run() {
                         let total = 0;
                         for (let i = 0; i < count; i++) total += Math.floor(Math.random() * sides) + 1;
                         console.log(`🎲 You rolled: ${total}`);
+                        if (AUTO_MODE) log(`**Dice Roll**: ${notation} = **${total}**\n`);
                         messages.push({ role: 'user', content: [{ type: 'text', text: `[dice-result] ${total}` }] });
                         // Re-compress for next iteration
                         const freshState = db.select({ storySummary: plotStates.storySummary }).from(plotStates).where(eq(plotStates.sessionId, sessionId)).get();
                         compressedMessages = await compressContext(messages, sessionId, freshState?.storySummary || '') as any[];
+                    } else if (lastFrameType === 'investigation' && lastInvestigationHotspots.length > 0) {
+                        // Investigation frame — player picks a hotspot to examine
+                        const hotspot = lastInvestigationHotspots[Math.floor(Math.random() * lastInvestigationHotspots.length)];
+                        const msg = `Player investigates: ${hotspot.label || hotspot.id}`;
+                        console.log(`\n🔍 [${AUTO_MODE ? 'AUTO: ' : ''}Investigating ${hotspot.label}]`);
+                        if (AUTO_MODE) log(`**Investigation**: ${hotspot.label} (${hotspot.id})\n`);
+                        messages.push({ role: 'user', content: [{ type: 'text', text: msg }] });
+                        const freshState2 = db.select({ storySummary: plotStates.storySummary }).from(plotStates).where(eq(plotStates.sessionId, sessionId)).get();
+                        compressedMessages = await compressContext(messages, sessionId, freshState2?.storySummary || '') as any[];
                     } else {
                         diceLoop = false;
                     }
@@ -405,6 +566,15 @@ async function run() {
 
             finishTrace('success');
 
+            // Increment turn count (mirrors tellChatRoute behavior)
+            const currentState = db.select({ turnCount: plotStates.turnCount }).from(plotStates).where(eq(plotStates.sessionId, sessionId)).get();
+            if (currentState) {
+                db.update(plotStates)
+                    .set({ turnCount: (currentState.turnCount ?? 0) + 1 })
+                    .where(eq(plotStates.sessionId, sessionId))
+                    .run();
+            }
+
             // Check for location transitions to trigger summarization
             if (preTurnState) {
                 const postTurnState = db.select({ currentLocationId: plotStates.currentLocationId }).from(plotStates).where(eq(plotStates.sessionId, sessionId)).get();
@@ -417,39 +587,112 @@ async function run() {
             if (!keepPlaying) break;
 
             // Prompt for player input
-            const ask = async (prompt: string) => {
-                try { return await rl.question(prompt); }
-                catch { keepPlaying = false; return 'exit'; }
-            };
-
-            if (options.length > 0) {
-                const answer = await ask('\n> ');
-                if (answer.toLowerCase() === 'exit' || answer.toLowerCase() === 'quit') {
-                    keepPlaying = false;
+            if (AUTO_MODE) {
+                // Auto-play: pick a choice or generate a free action
+                let chosenText: string;
+                if (options.length > 0) {
+                    // Pick a random choice, weighted toward earlier (main path) options
+                    const idx = Math.random() < 0.6 ? 0 : Math.floor(Math.random() * options.length);
+                    chosenText = `Player chooses: ${options[idx].text}`;
+                    console.log(`\n[AUTO] Chose option ${idx + 1}: ${options[idx].text}`);
+                    log(`**Player Choice**: Option ${idx + 1} — ${options[idx].text}\n`);
                 } else {
-                    const optIdx = parseInt(answer) - 1;
-                    const chosenText = (!isNaN(optIdx) && options[optIdx])
-                        ? `Player chooses: ${options[optIdx].text}`
-                        : `Player takes action: ${answer}`;
-                    messages.push({ role: 'user', content: [{ type: 'text', text: chosenText }] });
+                    // Use a rotating action from the pool
+                    const action = AUTO_ACTIONS[autoActionIdx % AUTO_ACTIONS.length];
+                    autoActionIdx++;
+                    chosenText = `Player: ${action}`;
+                    console.log(`\n[AUTO] Free action: ${action}`);
+                    log(`**Player Action**: ${action}\n`);
                 }
+                messages.push({ role: 'user', content: [{ type: 'text', text: chosenText }] });
             } else {
-                const answer = await ask('\n> ');
-                if (answer.toLowerCase() === 'exit' || answer.toLowerCase() === 'quit') {
-                    keepPlaying = false;
+                // Interactive mode
+                const ask = async (prompt: string) => {
+                    try { return await rl!.question(prompt); }
+                    catch { keepPlaying = false; return 'exit'; }
+                };
+
+                if (options.length > 0) {
+                    const answer = await ask('\n> ');
+                    if (answer.toLowerCase() === 'exit' || answer.toLowerCase() === 'quit') {
+                        keepPlaying = false;
+                    } else {
+                        const optIdx = parseInt(answer) - 1;
+                        const chosenText = (!isNaN(optIdx) && options[optIdx])
+                            ? `Player chooses: ${options[optIdx].text}`
+                            : `Player takes action: ${answer}`;
+                        messages.push({ role: 'user', content: [{ type: 'text', text: chosenText }] });
+                    }
                 } else {
-                    messages.push({ role: 'user', content: [{ type: 'text', text: `Player: ${answer}` }] });
+                    const answer = await ask('\n> ');
+                    if (answer.toLowerCase() === 'exit' || answer.toLowerCase() === 'quit') {
+                        keepPlaying = false;
+                    } else {
+                        messages.push({ role: 'user', content: [{ type: 'text', text: `Player: ${answer}` }] });
+                    }
                 }
             }
 
-        } catch (e) {
-            console.error('\n[Error computing next turn]', e);
-            finishTrace('error', e);
-            keepPlaying = false;
+        } catch (e: any) {
+            const errMsg = String(e?.message ?? '');
+            const isTimeout = e?.name === 'TimeoutError'
+                || errMsg.includes('timeout')
+                || errMsg.includes('aborted due to timeout');
+
+            const isRecoverable = isTimeout
+                || e?.name === 'AI_NoOutputGeneratedError'
+                || e?.name === 'AI_InvalidPromptError'
+                || errMsg.includes('No output generated');
+
+            if (isRecoverable) {
+                // Recoverable errors — downgrade model and retry next turn
+                console.error(`\n[Turn ${turnNumber} error (${e?.name ?? 'unknown'}) — recovering]`);
+                finishTrace('error', e);
+                if (AUTO_MODE) log(`**Turn ${turnNumber} error**: ${e?.name} — downgrading model\n`);
+
+                const newModel = downgradeModel('storyteller');
+                if (newModel) {
+                    console.log(`[Downgraded to ${newModel}, continuing next turn...]`);
+                    agent = createStorytellerAgent(vnPackage, sessionId);
+                    // Re-add a user message so the model has something to respond to
+                    if (AUTO_MODE) {
+                        const action = AUTO_ACTIONS[autoActionIdx % AUTO_ACTIONS.length];
+                        autoActionIdx++;
+                        messages.push({ role: 'user', content: [{ type: 'text', text: `Player: ${action}` }] });
+                    }
+                } else {
+                    console.log(`[All model fallbacks exhausted — ending session]`);
+                    keepPlaying = false;
+                }
+            } else {
+                console.error('\n[Error computing next turn]', e);
+                finishTrace('error', e);
+                if (AUTO_MODE) log(`\n**ERROR at Turn ${turnNumber}**: ${(e as any)?.message || e}\n`);
+                keepPlaying = false;
+            }
         }
     }
 
-    rl.close();
+    if (rl) rl.close();
+
+    if (AUTO_MODE) {
+        // Write final summary
+        const finalState = db.select().from(plotStates).where(eq(plotStates.sessionId, sessionId)).get();
+        const finalFlags = JSON.parse(finalState?.flagsJson || '{}');
+        const finalCompleted: string[] = JSON.parse(finalState?.completedLocations || '[]');
+        log(`\n---\n\n## Final State\n`);
+        log(`- Session: ${sessionId}`);
+        log(`- Total turns played: ${turnNumber}`);
+        log(`- Final act: ${finalState?.currentActId || '?'}`);
+        log(`- Final location: ${finalState?.currentLocationId || '?'}`);
+        log(`- Global progression: ${finalState?.globalProgression || 0}`);
+        log(`- Completed locations: ${finalCompleted.length > 0 ? finalCompleted.join(', ') : 'none'}`);
+        log(`- Flags (${Object.keys(finalFlags).length}): ${JSON.stringify(finalFlags, null, 2)}`);
+        log(`- Story summary: ${finalState?.storySummary || '(none)'}`);
+        log(`\nEnded: ${new Date().toISOString()}`);
+        console.log(`\n[AUTO-PLAY] Log written to: ${LOG_FILE}`);
+    }
+
     console.log('\n[Session ended]');
 }
 

@@ -75,19 +75,30 @@ export function evaluateRules(
     }
   }
 
-  // 5. Periodic Director refresh (every 3 turns)
+  // 5. Stale progression detection — if many turns have passed without reaching
+  //    the act's progression threshold, invoke Director more urgently
+  if (act.globalProgression) {
+    const { requiredValue } = act.globalProgression;
+    const remaining = requiredValue - state.globalProgression;
+    if (remaining > 0 && state.turnCount >= 8) {
+      needsDirector = true;
+      reasons.push(`stale progression (${state.globalProgression}/${requiredValue} after ${state.turnCount} turns) — Director should award milestone progression`);
+    }
+  }
+
+  // 6. Periodic Director refresh (every 3 turns)
   if (state.turnCount > 0 && state.turnCount % 3 === 0) {
     needsDirector = true;
     reasons.push(`periodic refresh (turn ${state.turnCount})`);
   }
 
-  // 6. First turn at a location always needs Director
+  // 7. First turn at a location always needs Director
   if (state.turnCount === 0) {
     needsDirector = true;
     reasons.push('first turn of session');
   }
 
-  // 7. Player query heuristics — detect interesting actions
+  // 8. Player query heuristics — detect interesting actions
   const queryLower = playerQuery.toLowerCase();
   const travelKeywords = ['go to', 'walk to', 'head to', 'travel', 'leave', 'exit', 'move to'];
   const actionKeywords = ['attack', 'fight', 'search', 'examine', 'pick', 'steal', 'break', 'open', 'hide', 'run'];

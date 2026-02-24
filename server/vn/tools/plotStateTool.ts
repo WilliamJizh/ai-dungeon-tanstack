@@ -263,6 +263,15 @@ export const plotStateTool = tool({
             state.globalProgression = newProg;
           }
 
+          // Hard fallback: if Director hasn't moved progression in 15+ turns,
+          // auto-award +1 to prevent infinite stalls.
+          const requiredProg = act.globalProgression?.requiredValue ?? Infinity;
+          if (state.globalProgression < requiredProg && state.turnCount >= 15 && !mutations.progressionDelta) {
+            console.log(`[PlotState] Stale progression override: auto-awarding +1 at turn ${state.turnCount} (${state.globalProgression}/${requiredProg})`);
+            state.globalProgression += 1;
+            updates.globalProgression = state.globalProgression;
+          }
+
           if (mutations.doomClockDelta) {
             const newForce = {
               ...state.opposingForce,
@@ -322,6 +331,49 @@ export const plotStateTool = tool({
 
           if (Object.keys(updates).length > 0) {
             db.update(plotStates).set(updates).where(eq(plotStates.sessionId, sessionId)).run();
+          }
+
+          // ── Auto-advance act when progression threshold is met ────────────
+          const requiredProg = act.globalProgression?.requiredValue ?? Infinity;
+          if (state.globalProgression >= requiredProg) {
+            const actIdx = pkg.plot.acts.findIndex(a => a.id === act.id);
+            const nextAct = actIdx >= 0 && actIdx + 1 < pkg.plot.acts.length
+              ? pkg.plot.acts[actIdx + 1]
+              : null;
+
+            if (nextAct) {
+              const nextLoc = nextAct.sandboxLocations?.[0];
+              console.log(`[PlotState] ACT COMPLETE: "${act.title}" → advancing to "${nextAct.title}" (${nextAct.id}), location: ${nextLoc?.id ?? 'none'}`);
+
+              const actAdvance: Record<string, any> = {
+                currentActId: nextAct.id,
+                currentBeat: 0,
+                offPathTurns: 0,
+                globalProgression: 0,  // Reset for new act
+              };
+
+              // Mark current location as completed
+              const completedLocs = [...state.completedLocations];
+              if (!completedLocs.includes(state.currentLocationId)) {
+                completedLocs.push(state.currentLocationId);
+              }
+              actAdvance.completedLocations = JSON.stringify(completedLocs);
+
+              if (nextLoc) {
+                actAdvance.currentLocationId = nextLoc.id;
+              }
+
+              db.update(plotStates).set(actAdvance).where(eq(plotStates.sessionId, sessionId)).run();
+
+              // Prepend act transition instructions to directorBrief
+              const transitionNote = `\n🔄 ACT TRANSITION: "${act.title}" is COMPLETE (progression ${state.globalProgression}/${requiredProg}). This is the FINAL turn of this act. Narrate a climactic conclusion that naturally bridges to the next phase. The next act is "${nextAct.title}" — objective: ${nextAct.objective}. After your concluding frames, emit a transition frame and a choice frame to let the player process the shift.`;
+              directorBrief = transitionNote + '\n\n' + directorBrief;
+            } else {
+              // Final act completed — game ending
+              console.log(`[PlotState] FINAL ACT COMPLETE: "${act.title}" — game should end.`);
+              const endNote = `\n🏁 FINAL ACT COMPLETE: "${act.title}" is COMPLETE. This is the ENDING of the story. Narrate a satisfying conclusion based on the player's accumulated choices and flags. End with a choice frame offering 2-3 epilogue reflections.`;
+              directorBrief = endNote + '\n\n' + directorBrief;
+            }
           }
 
           // Cache the brief
@@ -393,7 +445,10 @@ export const plotStateTool = tool({
         // Standard fields
         triggeredWorldInfo: triggeredWorldInfo.map(wi => ({ type: wi.type, content: wi.content })),
         activeFlags: state.flags,
-        availableConnections: location.connections,
+        availableConnections: location.connections.map(connId => {
+          const connLoc = act.sandboxLocations.find(l => l.id === connId);
+          return { id: connId, title: connLoc?.title ?? connId };
+        }),
         pendingInevitableEvents: act.inevitableEvents?.map(e => ({
           id: e.id,
           title: e.title,

@@ -20,6 +20,10 @@ import { getModel } from '../../lib/modelFactory.js';
 // removes the parameter entirely so the model cannot get it wrong.
 
 function bindSessionTools(sessionId: string) {
+  // Per-turn call tracking: prevents model from spamming plotStateTool
+  let cachedPlotResult: any = null;
+  let lastPlayerQuery = '';
+
   return {
     recordPlayerActionTool: tool({
       description: recordPlayerActionTool.description!,
@@ -44,7 +48,21 @@ function bindSessionTools(sessionId: string) {
           : Array.isArray(lastUserMsg?.content)
             ? lastUserMsg.content.map((c: any) => c.text ?? '').join(' ')
             : '';
-        return (plotStateTool as any).execute({ ...input, sessionId, playerQuery });
+
+        // Detect new turn: if playerQuery changed, reset cache
+        if (playerQuery !== lastPlayerQuery) {
+          cachedPlotResult = null;
+          lastPlayerQuery = playerQuery;
+        }
+
+        // After the first call per turn, return cached result with a nudge
+        if (cachedPlotResult) {
+          return { _cached: true, _hint: 'Context already loaded this turn. Produce frames with frameBuilderTool, or call requestTravelTool to move.' };
+        }
+
+        const result = await (plotStateTool as any).execute({ ...input, sessionId, playerQuery });
+        cachedPlotResult = result;
+        return result;
       },
     }),
     playerStatsTool: tool({
@@ -254,6 +272,7 @@ DM WORKFLOW (every turn):
    - Guideline: ~1 in 3 turns should end with explicit choices. Intense scenes more, quiet scenes fewer.
    - **CRITICAL SEQUENCE RULE:** Choice frames and \`requestTravelTool\` are terminal. They MUST be the absolute final tool calls in your response. Do NOT generate any further tools (no new frames, no state checks) after them in the same turn.
 7. SANDBOX TRAVEL: When the player wants to move to a different location, call \`requestTravelTool\` with the \`targetLocationId\` from \`availableConnections\`. The loop stops and the next turn begins at the new location with fresh Director guidance.
+   - ACT TRANSITIONS: When the \`directorBrief\` mentions "ACT TRANSITION" or "FINAL ACT COMPLETE", narrate a climactic conclusion for the current act. Use a transition frame, then end with a choice frame. The system automatically advances the act — you do NOT need to call any special tool.
 8. Effects are punctuation, not decoration — use sparingly:
    - Set audio.musicAsset on the first frame of each scene (use the scene's mood key) with fadeIn:true. Shift it when mood changes.
    - Frame-level effects[]: use at most 1 per frame, and only on scene-setting frames (fade-in for arrivals, vignette-pulse for first moment of dread).
@@ -327,7 +346,8 @@ function hasPlayerActionFrame(): StopCondition<any> {
     return lastStep?.toolCalls?.some((tc: any) => {
       if (tc.toolName !== 'frameBuilderTool') return false;
       const type = (tc.input as any)?.type;
-      return type === 'choice' || type === 'dice-roll';
+      // choice, dice-roll, and investigation are all interactive frames that require player input
+      return type === 'choice' || type === 'dice-roll' || type === 'investigation';
     }) ?? false;
   };
 }
@@ -338,10 +358,23 @@ function storytellerPrepareStep({ stepNumber, steps }: { stepNumber: number; ste
     return { toolChoice: { type: 'tool' as const, toolName: 'plotStateTool' as const } };
   }
 
-  // If a previous step produced no tool calls, force a frame recovery step.
   const prevStep = steps[steps.length - 1] as any;
   const prevToolCalls = Array.isArray(prevStep?.toolCalls) ? prevStep.toolCalls : [];
+
+  // If a previous step produced no tool calls, force a frame recovery step.
   if (prevToolCalls.length === 0) {
+    return { toolChoice: { type: 'tool' as const, toolName: 'frameBuilderTool' as const } };
+  }
+
+  // Step 1: Force frame generation immediately after plotStateTool.
+  // Deterministic first frame step reduces Gemini hang probability in 'required' mode.
+  if (stepNumber === 1) {
+    return { toolChoice: { type: 'tool' as const, toolName: 'frameBuilderTool' as const } };
+  }
+
+  // Step 2+: If model is stuck calling only plotStateTool, force frame production.
+  const allPlotState = prevToolCalls.every((tc: any) => tc.toolName === 'plotStateTool');
+  if (allPlotState) {
     return { toolChoice: { type: 'tool' as const, toolName: 'frameBuilderTool' as const } };
   }
 
@@ -369,7 +402,7 @@ export function createStorytellerAgent(vnPackage: VNPackage, sessionId: string) 
     stopWhen: [
       hasPlayerActionFrame(),
       hasToolCall('requestTravelTool'),
-      stepCountIs(20),
+      stepCountIs(12),
     ],
   });
 }

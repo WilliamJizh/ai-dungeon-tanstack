@@ -175,8 +175,10 @@ export function sanitizeHistory(rawMessages: any[]): any[] {
 
 // ── Watermark thresholds ────────────────────────────────────────────────────
 // When messages exceed HIGH_WATER, summarize the oldest batch and cut to LOW_WATER.
-const HIGH_WATER = 80;
-const LOW_WATER = 40;
+// Gemini stalls on conversations > ~14 messages with tool call/result pairs.
+// Aggressive compression keeps conversations compact.
+const HIGH_WATER = 10;
+const LOW_WATER = 6;
 
 /**
  * Summarizes a batch of messages into a concise narrative paragraph.

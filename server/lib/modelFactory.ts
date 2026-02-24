@@ -23,6 +23,41 @@ export type ModelRole = keyof typeof MODEL_IDS;
 
 const PROVIDER = process.env.AI_PROVIDER ?? 'google';
 
+// ── Model downgrade fallback chain ───────────────────────────────────────────
+// On quota/rate-limit errors, call downgradeModel(role) to step down one tier.
+const GEMINI_FALLBACK_CHAIN: Record<string, string[]> = {
+  storyteller: [MODEL_IDS.storyteller, 'gemini-3-pro-preview', 'gemini-3-flash-preview'],
+  planning:    [MODEL_IDS.planning, 'gemini-3-pro-preview', 'gemini-3-flash-preview'],
+  summarizer:  [MODEL_IDS.summarizer, 'gemini-3-flash-preview'],
+  chat:        [MODEL_IDS.chat, 'gemini-3-pro-preview', 'gemini-3-flash-preview'],
+};
+
+const modelOverrides = new Map<string, string>();
+
+/** Step down to the next model in the fallback chain. Returns new model ID or null if exhausted. */
+export function downgradeModel(role: ModelRole): string | null {
+  const currentId = modelOverrides.get(role) ?? MODEL_IDS[role];
+  const chain = GEMINI_FALLBACK_CHAIN[role] ?? [];
+  // Deduplicate chain (env might already point to a fallback model)
+  const unique = [...new Set(chain)];
+  const currentIdx = unique.indexOf(currentId);
+  const nextIdx = currentIdx >= 0 ? currentIdx + 1 : 1;
+  if (nextIdx < unique.length) {
+    modelOverrides.set(role, unique[nextIdx]);
+    console.log(`[ModelFactory] Downgraded ${role}: ${currentId} → ${unique[nextIdx]}`);
+    return unique[nextIdx];
+  }
+  console.log(`[ModelFactory] No further fallback for ${role} (current: ${currentId})`);
+  return null;
+}
+
+/** Check if an error is a quota or rate-limit error. */
+export function isQuotaOrRateLimitError(err: unknown): boolean {
+  const msg = String((err as any)?.message ?? '');
+  return msg.includes('429') || msg.includes('quota') || msg.includes('RESOURCE_EXHAUSTED')
+    || msg.includes('rate limit') || msg.includes('Too Many Requests');
+}
+
 let _googleClient: ReturnType<typeof createGoogleGenerativeAI> | null = null;
 let _openRouterClient: ReturnType<typeof createOpenRouter> | null = null;
 
@@ -205,7 +240,7 @@ export function getActiveModelInfo(role: ModelRole): { provider: string, modelId
       return { provider: 'openrouter', modelId: OPENROUTER_MODEL_IDS[role] };
     }
   }
-  return { provider: 'google', modelId: MODEL_IDS[role] };
+  return { provider: 'google', modelId: modelOverrides.get(role) ?? MODEL_IDS[role] };
 }
 
 /**
@@ -227,7 +262,8 @@ export function getModel(role: ModelRole) {
  * Reuses a single google client across the process.
  */
 export function getGoogleModel(role: ModelRole) {
-  const model = getGoogleClient()(MODEL_IDS[role]);
+  const modelId = modelOverrides.get(role) ?? MODEL_IDS[role];
+  const model = getGoogleClient()(modelId);
 
   // Gemini 3 Pro strictly requires alternating System/User -> Assistant -> User -> Assistant.
   // The Vercel AI SDK sometimes emits back-to-back assistant tool-calls or user tool-results
