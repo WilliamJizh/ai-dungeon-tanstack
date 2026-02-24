@@ -47,8 +47,26 @@ export function downgradeModel(role: ModelRole): string | null {
     console.log(`[ModelFactory] Downgraded ${role}: ${currentId} → ${unique[nextIdx]}`);
     return unique[nextIdx];
   }
-  console.log(`[ModelFactory] No further fallback for ${role} (current: ${currentId})`);
-  return null;
+  // Exhausted chain — wrap around to flash (last in chain) so we never fully die
+  const flash = unique[unique.length - 1];
+  if (flash && currentId !== flash) {
+    modelOverrides.set(role, flash);
+    console.log(`[ModelFactory] No further fallback for ${role}, staying on ${flash}`);
+    return flash;
+  }
+  console.log(`[ModelFactory] Already at final fallback for ${role}: ${currentId}`);
+  return currentId; // Return current model instead of null — never truly exhaust
+}
+
+/** Reset a role back to its original (best) model. */
+export function resetModel(role: ModelRole): string {
+  const original = MODEL_IDS[role];
+  const current = modelOverrides.get(role);
+  if (current && current !== original) {
+    modelOverrides.delete(role);
+    console.log(`[ModelFactory] Reset ${role}: ${current} → ${original}`);
+  }
+  return original;
 }
 
 /** Check if an error is a quota or rate-limit error. */

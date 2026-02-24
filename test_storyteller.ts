@@ -8,7 +8,7 @@ import { stdin as input, stdout as output } from 'node:process';
 import { createStorytellerAgent } from './server/vn/agents/storytellerChatAgent.js';
 import type { VNPackage } from './server/vn/types/vnTypes.js';
 import { compressContext, summarizeNodeInBackground, sanitizeHistory } from './server/vn/utils/contextCompressor.js';
-import { startLLMTrace, getActiveModelInfo, downgradeModel, isQuotaOrRateLimitError } from './server/lib/modelFactory.js';
+import { startLLMTrace, getActiveModelInfo, downgradeModel, resetModel, isQuotaOrRateLimitError } from './server/lib/modelFactory.js';
 import { writeFileSync, appendFileSync, existsSync } from 'node:fs';
 
 // Get the package ID or session ID from the args
@@ -115,6 +115,7 @@ async function run() {
     let keepPlaying = true;
     let messages: any[] = [];
     let turnNumber = 0;
+    let consecutiveSuccesses = 0;
 
     if (isResuming && existingSession) {
         const flags = JSON.parse(existingSession.flagsJson || '{}');
@@ -577,6 +578,20 @@ async function run() {
 
             finishTrace('success');
 
+            // Model recovery: after 3 consecutive successful turns on a downgraded model,
+            // try resetting to the best model to get richer narrative quality.
+            consecutiveSuccesses++;
+            if (consecutiveSuccesses >= 3) {
+                const { modelId: currentModelId } = getActiveModelInfo('storyteller');
+                const originalId = resetModel('storyteller');
+                if (currentModelId !== originalId) {
+                    console.log(`\n[Model Recovery] ${currentModelId} → ${originalId} after ${consecutiveSuccesses} successes`);
+                    if (AUTO_MODE) log(`**Model Recovery**: upgraded back to ${originalId}\n`);
+                    agent = createStorytellerAgent(vnPackage, sessionId);
+                    consecutiveSuccesses = 0;
+                }
+            }
+
             // Increment turn count (mirrors tellChatRoute behavior)
             const currentState = db.select({ turnCount: plotStates.turnCount }).from(plotStates).where(eq(plotStates.sessionId, sessionId)).get();
             if (currentState) {
@@ -712,24 +727,26 @@ async function run() {
                 || errMsg.includes('No output generated');
 
             if (isRecoverable) {
-                // Recoverable errors — downgrade model and retry next turn
+                consecutiveSuccesses = 0;
                 console.error(`\n[Turn ${turnNumber} error (${e?.name ?? 'unknown'}) — recovering]`);
                 finishTrace('error', e);
-                if (AUTO_MODE) log(`**Turn ${turnNumber} error**: ${e?.name} — downgrading model\n`);
 
-                const newModel = downgradeModel('storyteller');
-                if (newModel) {
+                // Only downgrade on timeout/quota errors. Transient empty responses just retry same model.
+                if (isTimeout || isQuotaOrRateLimitError(e)) {
+                    const newModel = downgradeModel('storyteller');
                     console.log(`[Downgraded to ${newModel}, continuing next turn...]`);
+                    if (AUTO_MODE) log(`**Turn ${turnNumber} error**: ${e?.name} — downgraded to ${newModel}\n`);
                     agent = createStorytellerAgent(vnPackage, sessionId);
-                    // Re-add a user message so the model has something to respond to
-                    if (AUTO_MODE) {
-                        const action = AUTO_ACTIONS[autoActionIdx % AUTO_ACTIONS.length];
-                        autoActionIdx++;
-                        messages.push({ role: 'user', content: [{ type: 'text', text: `Player: ${action}` }] });
-                    }
                 } else {
-                    console.log(`[All model fallbacks exhausted — ending session]`);
-                    keepPlaying = false;
+                    console.log(`[Transient error (${e?.name}), retrying with same model...]`);
+                    if (AUTO_MODE) log(`**Turn ${turnNumber} error**: ${e?.name} — retrying\n`);
+                }
+
+                // Re-add a user message so the model has something to respond to
+                if (AUTO_MODE) {
+                    const action = AUTO_ACTIONS[autoActionIdx % AUTO_ACTIONS.length];
+                    autoActionIdx++;
+                    messages.push({ role: 'user', content: [{ type: 'text', text: `Player: ${action}` }] });
                 }
             } else {
                 console.error('\n[Error computing next turn]', e);
