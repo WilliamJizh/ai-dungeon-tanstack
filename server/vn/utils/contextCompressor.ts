@@ -12,13 +12,28 @@ export function sanitizeHistory(rawMessages: any[]): any[] {
     const keptPristineTools = new Set<string>();
     const pristineToolCallIds = new Set<string>();
 
-    // Pass 1: Identify the newest (pristine) tool calls going backward
+    // Pass 1: Identify the newest (pristine) tool calls going backward.
+    // For the most recent turn (after the last user message), keep ALL
+    // frameBuilderTool calls pristine so the model has full context of
+    // what was just shown and doesn't repeat scene content.
+    let inRecentTurn = true;
+
     for (let i = rawMessages.length - 1; i >= 0; i--) {
         const msg = rawMessages[i];
+
+        if (msg.role === 'user') {
+            inRecentTurn = false;
+        }
+
         if (msg.role === 'assistant' && Array.isArray(msg.content)) {
             for (const part of msg.content) {
                 if (part.type === 'tool-call') {
-                    if (!keptPristineTools.has(part.toolName)) {
+                    if (inRecentTurn && part.toolName === 'frameBuilderTool') {
+                        // Keep ALL frames from the current turn — model needs
+                        // full context of what was just shown to avoid repeating.
+                        if (part.toolCallId) pristineToolCallIds.add(part.toolCallId.trim());
+                        keptPristineTools.add(part.toolName);
+                    } else if (!keptPristineTools.has(part.toolName)) {
                         keptPristineTools.add(part.toolName);
                         if (part.toolCallId) pristineToolCallIds.add(part.toolCallId.trim());
                     }

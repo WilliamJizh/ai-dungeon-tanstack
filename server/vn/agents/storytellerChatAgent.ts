@@ -1,10 +1,11 @@
 import { ToolLoopAgent, InferAgentUIMessage, hasToolCall, tool, stepCountIs } from 'ai';
+import type { StopCondition } from 'ai';
 import { FRAME_REGISTRY } from '../frameRegistry.js';
 import { z } from 'zod';
 import { frameBuilderTool, FrameInputSchema } from '../tools/frameBuilderTool.js';
 import { plotStateTool } from '../tools/plotStateTool.js';
 import { nodeCompleteTool } from '../tools/nodeCompleteTool.js';
-import { yieldToPlayerTool } from '../tools/yieldToPlayerTool.js';
+// yieldToPlayer removed — agent loop stops on choice/dice-roll frames directly
 import { playerStatsTool } from '../tools/playerStatsTool.js';
 import { initCombatTool } from '../tools/initCombatTool.js';
 import { combatEventTool } from '../tools/combatEventTool.js';
@@ -229,21 +230,19 @@ DM WORKFLOW (every turn):
    - Open new scenes with the world, not the plot. Let the player inhabit the space before things happen.
    - Reveal at most ONE finding per turn, and only when the player's action naturally uncovers it.
    - **Resolution (PbtA 2d6 Mechanics):** Skill checks and risky moves use a 2d6 system.
-     a. Build tension with narrative. Then create a dice-roll frame: set diceNotation to "2d6", description including the stat modifier to add (e.g., "Roll 2d6 + Logic (+1)"). Do NOT set the roll value.
-     b. Call yieldToPlayer({ waitingFor: 'dice-result' }) and STOP.
-     c. On the NEXT turn you'll receive "[dice-result] N". The outcome bands are:
+     a. Build tension with narrative. Then create a dice-roll frame: set diceNotation to "2d6", description including the stat modifier to add (e.g., "Roll 2d6 + Logic (+1)"). Do NOT set the roll value — the client computes it. The agent loop STOPS automatically on dice-roll frames.
+     b. On the NEXT turn you'll receive "[dice-result] N". The outcome bands are:
         - 10+: Full Success. The player achieves their goal perfectly.
         - 7-9: Mixed Success/Complication. They achieve their goal, BUT explicitly introduce a "fail forward" complication, cost, or hard choice.
         - 6 or less: Miss. They fail, and you introduce a "hard move" that pushes the narrative into a worse state.
-     d. Narrate the consequence using subjective, panicked, or dramatic pacing, then generate the skill-check frame.
+     c. Narrate the consequence using subjective, panicked, or dramatic pacing, then generate the skill-check frame.
    - Honor free-text actions even when off-script. "Fail Forward" — introduce a complication, never an invisible wall.
-4. Turn endings — choose the right mode for the narrative moment:
-   - yieldToPlayer({ waitingFor: 'choice' }) — ONLY at genuine decision points. Last frame must be a choice frame with 2-3 options + showFreeTextInput:true.
-   - yieldToPlayer({ waitingFor: 'free-text' }) — when the situation is open-ended (exploring, responding to NPC). Last frame should have showFreeTextInput:true. This is the DEFAULT for most turns.
-   - yieldToPlayer({ waitingFor: 'continue' }) — for pure narrative turns (atmosphere, character development, unfolding events with no player agency needed).
-   - NEVER force a choice frame just because the turn is ending. If the narrative hasn't earned a decision point, use 'free-text' or 'continue'.
-   - Guideline: ~1 in 3 turns should end with choices. Intense scenes more, quiet scenes fewer.
-   - **CRITICAL SEQUENCE RULE:** \`yieldToPlayer\` and \`nodeCompleteTool\` are terminal actions. They MUST be the absolute final tool calls in your response. Do NOT generate any further tools (no new frames, no state checks) after calling them in the same turn. If transitioning locations, wait for the NEXT turn to generate the new location's frame.
+4. Turn endings — the agent loop stops AUTOMATICALLY when you emit a choice or dice-roll frame. No explicit yield tool is needed.
+   - At genuine decision points: emit a choice frame (type: 'choice') with 2-3 options + showFreeTextInput:true. The loop stops and the player picks.
+   - For open-ended situations (exploring, responding to NPC): emit a choice frame with showFreeTextInput:true. This is the DEFAULT for most turns.
+   - For pure narrative with no player agency: keep generating frames, then end with a choice frame (showFreeTextInput:true) to allow free-text actions.
+   - Guideline: ~1 in 3 turns should end with explicit choices. Intense scenes more, quiet scenes fewer.
+   - **CRITICAL SEQUENCE RULE:** Choice frames and \`nodeCompleteTool\` are terminal. They MUST be the absolute final tool calls in your response. Do NOT generate any further tools (no new frames, no state checks) after them in the same turn. If transitioning locations, wait for the NEXT turn to generate the new location's frame.
 5. Effects are punctuation, not decoration — use sparingly:
    - Set audio.musicAsset on the first frame of each scene (use the scene's mood key) with fadeIn:true. Shift it when mood changes.
    - Frame-level effects[]: use at most 1 per frame, and only on scene-setting frames (fade-in for arrivals, vignette-pulse for first moment of dread).
@@ -309,6 +308,35 @@ ${workflowEntries}
 `;
 }
 
+// ─── Stop condition: stop when agent emits a choice or dice-roll frame ────────
+
+function hasPlayerActionFrame(): StopCondition<any> {
+  return ({ steps }) => {
+    const lastStep = steps[steps.length - 1];
+    return lastStep?.toolCalls?.some((tc: any) => {
+      if (tc.toolName !== 'frameBuilderTool') return false;
+      const type = (tc.input as any)?.type;
+      return type === 'choice' || type === 'dice-roll';
+    }) ?? false;
+  };
+}
+
+function storytellerPrepareStep({ stepNumber, steps }: { stepNumber: number; steps: any[] }) {
+  // Always start the turn by grounding context/state.
+  if (stepNumber === 0) {
+    return { toolChoice: { type: 'tool' as const, toolName: 'plotStateTool' as const } };
+  }
+
+  // If a previous step produced no tool calls, force a frame recovery step.
+  const prevStep = steps[steps.length - 1] as any;
+  const prevToolCalls = Array.isArray(prevStep?.toolCalls) ? prevStep.toolCalls : [];
+  if (prevToolCalls.length === 0) {
+    return { toolChoice: { type: 'tool' as const, toolName: 'frameBuilderTool' as const } };
+  }
+
+  return undefined;
+}
+
 // ─── Agent factory (per-request, with sessionId bound in tools/prompt) ────────
 
 export function createStorytellerAgent(vnPackage: VNPackage, sessionId: string) {
@@ -316,20 +344,22 @@ export function createStorytellerAgent(vnPackage: VNPackage, sessionId: string) 
   return new ToolLoopAgent({
     model: getModel('storyteller'),
     instructions: buildDMSystemPrompt(vnPackage, sessionId),
+    toolChoice: 'required',
+    prepareStep: storytellerPrepareStep,
     tools: {
       plotStateTool: bound.plotStateTool,
       frameBuilderTool,
       nodeCompleteTool: bound.nodeCompleteTool,
-      yieldToPlayer: yieldToPlayerTool,
       playerStatsTool: bound.playerStatsTool,
       initCombatTool: bound.initCombatTool,
       combatEventTool: bound.combatEventTool,
       recordPlayerActionTool: bound.recordPlayerActionTool,
     },
-    stopWhen: (step: any) =>
-      stepCountIs(10)(step) ||
-      (hasToolCall('yieldToPlayer') as (s: any) => boolean)(step) ||
-      (hasToolCall('nodeCompleteTool') as (s: any) => boolean)(step),
+    stopWhen: [
+      hasPlayerActionFrame(),
+      hasToolCall('nodeCompleteTool'),
+      stepCountIs(20),
+    ],
   });
 }
 
@@ -376,12 +406,6 @@ const _typeAgent = new ToolLoopAgent({
         nextActId: null as string | null,
         isGameComplete: false,
       }),
-    }),
-    yieldToPlayer: tool({
-      inputSchema: z.object({
-        waitingFor: z.enum(['choice', 'free-text', 'continue', 'combat-result']),
-      }),
-      execute: async () => ({}),
     }),
     playerStatsTool: tool({
       inputSchema: z.object({

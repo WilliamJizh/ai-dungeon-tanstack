@@ -58,11 +58,45 @@ interface ActiveTrace {
   startedAt: number;
   toolCallCount: number;
   frameCount: number;
+  zeroOutputStopNoToolSteps: number;
   /** Captured once from the first LLM call; written to trace-level input on finish. */
   initialPrompt?: { prompt: any; tools: any };
+  /** Buffered from middleware per LLM call, consumed by onStepFinish. */
+  pendingPrompt?: any;
 }
 
 let _activeTrace: ActiveTrace | null = null;
+
+/**
+ * Buffer the prompt from a middleware hook for per-step capture.
+ * Also captures initial prompt once (for trace-level input on finish).
+ */
+function capturePromptForTrace(params: any) {
+  if (!_activeTrace) return;
+  try {
+    // Buffer prompt for the upcoming onStepFinish call
+    _activeTrace.pendingPrompt = params.prompt;
+
+    // Also capture initial prompt + tools once (trace-level)
+    if (!_activeTrace.initialPrompt) {
+      let toolSummary: Record<string, any> | undefined;
+      if (params.tools) {
+        toolSummary = {};
+        for (const [name, t] of Object.entries(params.tools ?? {})) {
+          const tool = t as any;
+          toolSummary[name] = {
+            type: tool.type,
+            description: tool.description,
+            parameters: tool.parameters,
+          };
+        }
+      }
+      _activeTrace.initialPrompt = { prompt: params.prompt, tools: toolSummary };
+    }
+  } catch (err) {
+    console.error('[Trace] Failed to capture prompt:', err);
+  }
+}
 
 /**
  * Start tracing all LLM calls through the model middleware.
@@ -76,7 +110,7 @@ export function startLLMTrace(
   const traceId = createTrace(context, input ?? {});
   const trace: ActiveTrace = {
     traceId, stepCount: 0, startedAt: Date.now(),
-    toolCallCount: 0, frameCount: 0,
+    toolCallCount: 0, frameCount: 0, zeroOutputStopNoToolSteps: 0,
   };
   _activeTrace = trace;
 
@@ -86,11 +120,31 @@ export function startLLMTrace(
     trace.toolCallCount += calls.length;
     trace.frameCount += calls.filter((c: any) => c.toolName === 'frameBuilderTool').length;
 
+    const outputTokensRaw = (step.usage as any)?.outputTokens;
+    const outputTokens = typeof outputTokensRaw === 'number' ? outputTokensRaw : Number(outputTokensRaw ?? 0);
+    const isZeroOutputStopNoTool = step.finishReason === 'stop' && calls.length === 0 && outputTokens === 0;
+    if (isZeroOutputStopNoTool) {
+      trace.zeroOutputStopNoToolSteps += 1;
+      console.warn(`  [Trace] zero-output stop without tool calls at step=${idx}`);
+    }
+
+    // Consume the prompt buffered by middleware (params.prompt per LLM call)
+    let request: unknown;
+    const bufferedPrompt = trace.pendingPrompt;
+    trace.pendingPrompt = undefined;
+    if (bufferedPrompt) {
+      request = {
+        messageCount: Array.isArray(bufferedPrompt) ? bufferedPrompt.length : 0,
+        messages: bufferedPrompt,
+      };
+    }
+
     appendTraceStep({
       traceId: trace.traceId,
       stepIndex: idx,
       finishReason: step.finishReason,
       usage: step.usage,
+      request,
       toolCalls: calls.map((c: any) => ({
         toolCallId: c.toolCallId,
         toolName: c.toolName,
@@ -117,14 +171,25 @@ export function startLLMTrace(
         ? { prompt: trace.initialPrompt.prompt, tools: trace.initialPrompt.tools }
         : undefined,
       output: status === 'success'
-        ? { stepCount: trace.stepCount, toolCallCount: trace.toolCallCount, frameCount: trace.frameCount }
+        ? {
+          stepCount: trace.stepCount,
+          toolCallCount: trace.toolCallCount,
+          frameCount: trace.frameCount,
+          zeroOutputStopNoToolSteps: trace.zeroOutputStopNoToolSteps,
+        }
         : undefined,
       error: error
         ? error instanceof Error
           ? { name: error.name, message: error.message }
           : { message: String(error) }
         : undefined,
-      meta: { stepCount: trace.stepCount, toolCallCount: trace.toolCallCount, frameCount: trace.frameCount },
+      meta: {
+        stepCount: trace.stepCount,
+        toolCallCount: trace.toolCallCount,
+        frameCount: trace.frameCount,
+        zeroOutputStopNoToolSteps: trace.zeroOutputStopNoToolSteps,
+        anomalyZeroOutputStopNoTool: trace.zeroOutputStopNoToolSteps > 0,
+      },
     });
   };
 
@@ -204,32 +269,23 @@ export function getGoogleModel(role: ModelRole) {
             console.log(`  [LLM Text] ${textPreview}`);
           }
 
-          // Capture prompt + tools from the first LLM call only (same for every step in a turn)
-          if (_activeTrace && !_activeTrace.initialPrompt) {
-            try {
-              let toolSummary: Record<string, any> | undefined;
-              if (params.tools) {
-                toolSummary = {};
-                for (const [name, t] of Object.entries(params.tools ?? {})) {
-                  const tool = t as any;
-                  toolSummary[name] = {
-                    type: tool.type,
-                    description: tool.description,
-                    parameters: tool.parameters,
-                  };
-                }
-              }
-              _activeTrace.initialPrompt = { prompt: params.prompt, tools: toolSummary };
-            } catch (err) {
-              console.error('[Trace] Failed to capture initial prompt:', err);
-            }
-          }
+          capturePromptForTrace(params);
           return result;
         } catch (err) {
           const llmMs = Date.now() - llmStart;
           console.error(`  [LLM Call] FAILED after ${llmMs}ms:`, err);
           throw err;
         }
+      },
+      wrapStream: async ({ doStream, params }: any) => {
+        const llmStart = Date.now();
+        const toolNames = params.tools ? Object.keys(params.tools).join(', ') : 'none';
+        console.log(`  [LLM Stream] Starting... tools=[${toolNames}]`);
+        capturePromptForTrace(params);
+        const result = await doStream();
+        const llmMs = Date.now() - llmStart;
+        console.log(`  [LLM Stream] Connected in ${llmMs}ms`);
+        return result;
       },
     }
   });
@@ -268,31 +324,23 @@ export function getOpenRouterModel(role: ModelRole) {
             console.log(`  [OpenRouter LLM Text] ${textPreview}`);
           }
 
-          if (_activeTrace && !_activeTrace.initialPrompt) {
-            try {
-              let toolSummary: Record<string, any> | undefined;
-              if (params.tools) {
-                toolSummary = {};
-                for (const [name, t] of Object.entries(params.tools ?? {})) {
-                  const tool = t as any;
-                  toolSummary[name] = {
-                    type: tool.type,
-                    description: tool.description,
-                    parameters: tool.parameters,
-                  };
-                }
-              }
-              _activeTrace.initialPrompt = { prompt: params.prompt, tools: toolSummary };
-            } catch (err) {
-              console.error('[Trace] Failed to capture initial prompt:', err);
-            }
-          }
+          capturePromptForTrace(params);
           return result;
         } catch (err) {
           const llmMs = Date.now() - llmStart;
           console.error(`  [OpenRouter LLM Call] FAILED after ${llmMs}ms:`, err);
           throw err;
         }
+      },
+      wrapStream: async ({ doStream, params }: any) => {
+        const llmStart = Date.now();
+        const toolNames = params.tools ? Object.keys(params.tools).join(', ') : 'none';
+        console.log(`  [OpenRouter LLM Stream] Starting... tools=[${toolNames}]`);
+        capturePromptForTrace(params);
+        const result = await doStream();
+        const llmMs = Date.now() - llmStart;
+        console.log(`  [OpenRouter LLM Stream] Connected in ${llmMs}ms`);
+        return result;
       },
     }
   });

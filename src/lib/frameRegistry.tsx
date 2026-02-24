@@ -18,16 +18,25 @@ import type { ComponentType } from 'react';
 import type { FrameType, VNFrame } from '../../server/vn/types/vnFrame';
 import type { VNPackage } from '../../server/vn/types/vnTypes';
 
-import { FullScreenFrame }  from '../components/vn/frames/FullScreenFrame';
-import { DialogueFrame }    from '../components/vn/frames/DialogueFrame';
-import { ThreePanelFrame }  from '../components/vn/frames/ThreePanelFrame';
-import { ChoiceFrame }      from '../components/vn/frames/ChoiceFrame';
-import { BattleFrame }      from '../components/vn/frames/BattleFrame';
-import { DiceRollFrame }    from '../components/vn/frames/DiceRollFrame';
-import { SkillCheckFrame }  from '../components/vn/frames/SkillCheckFrame';
-import { InventoryFrame }   from '../components/vn/frames/InventoryFrame';
-import { MapFrame }         from '../components/vn/frames/MapFrame';
+import { FullScreenFrame } from '../components/vn/frames/FullScreenFrame';
+import { DialogueFrame } from '../components/vn/frames/DialogueFrame';
+import { ThreePanelFrame } from '../components/vn/frames/ThreePanelFrame';
+import { ChoiceFrame } from '../components/vn/frames/ChoiceFrame';
+import { BattleFrame } from '../components/vn/frames/BattleFrame';
+import { DiceRollFrame } from '../components/vn/frames/DiceRollFrame';
+import { SkillCheckFrame } from '../components/vn/frames/SkillCheckFrame';
+import { InventoryFrame } from '../components/vn/frames/InventoryFrame';
+import { MapFrame } from '../components/vn/frames/MapFrame';
 import { TacticalMapFrame } from '../components/vn/frames/TacticalMapFrame';
+import { ItemPresentationFrame } from '../components/vn/frames/ItemPresentationFrame';
+import { CGPresentationFrame } from '../components/vn/frames/CGPresentationFrame';
+import { CenteredMonologueFrame } from '../components/vn/frames/CenteredMonologueFrame';
+import { InvestigationFrame } from '../components/vn/frames/InvestigationFrame';
+import { LoreUnlockFrame } from '../components/vn/frames/LoreUnlockFrame';
+import { DynamicCutInFrame } from '../components/vn/frames/DynamicCutInFrame';
+import { FlashbackFrame } from '../components/vn/frames/FlashbackFrame';
+import { CrossExaminationFrame } from '../components/vn/frames/CrossExaminationFrame';
+import { TimeLimitFrame } from '../components/vn/frames/TimeLimitFrame';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -52,18 +61,27 @@ export interface ClientFrameEntry {
 
 /** TypeScript errors if any FrameType is missing from this Record. */
 export const CLIENT_FRAME_REGISTRY: Record<FrameType, ClientFrameEntry> = {
-  'full-screen':     { component: FullScreenFrame },
-  'dialogue':        { component: DialogueFrame },   // fallback to FullScreenFrame handled in resolveFrameEntry
-  'three-panel':     { component: ThreePanelFrame },
-  'choice':          { component: ChoiceFrame },
-  'battle':          { component: BattleFrame },
-  'transition':      { component: FullScreenFrame }, // no dedicated TransitionFrame component
-  'skill-check':     { component: SkillCheckFrame },
-  'dice-roll':       { component: DiceRollFrame },
-  'inventory':       { component: InventoryFrame },
-  'map':             { component: MapFrame },
+  'full-screen': { component: FullScreenFrame },
+  'dialogue': { component: DialogueFrame },   // fallback to FullScreenFrame handled in resolveFrameEntry
+  'three-panel': { component: ThreePanelFrame },
+  'choice': { component: ChoiceFrame },
+  'battle': { component: BattleFrame },
+  'transition': { component: FullScreenFrame }, // no dedicated TransitionFrame component
+  'skill-check': { component: SkillCheckFrame },
+  'dice-roll': { component: DiceRollFrame },
+  'inventory': { component: InventoryFrame },
+  'map': { component: MapFrame },
   'character-sheet': { component: FullScreenFrame }, // no dedicated CharacterSheetFrame component
-  'tactical-map':    { component: TacticalMapFrame }, // always handled by explicit branch in renderers
+  'tactical-map': { component: TacticalMapFrame }, // always handled by explicit branch in renderers
+  'item-presentation': { component: ItemPresentationFrame },
+  'cg-presentation': { component: CGPresentationFrame },
+  'centered-monologue': { component: CenteredMonologueFrame },
+  'investigation': { component: InvestigationFrame },
+  'lore-unlock': { component: LoreUnlockFrame },
+  'dynamic-cut-in': { component: DynamicCutInFrame },
+  'flashback': { component: FlashbackFrame },
+  'cross-examination': { component: CrossExaminationFrame },
+  'time-limit': { component: TimeLimitFrame },
 };
 
 // ─── Resolver ─────────────────────────────────────────────────────────────────

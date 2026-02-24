@@ -8,6 +8,7 @@ export interface ToolHistoryFlattener {
 export const TOOL_FLATTENERS: Record<string, ToolHistoryFlattener> = {
     frameBuilderTool: {
         flattenCall: (args) => {
+            const type = args.type || 'scene';
             let narrative = '';
             if (args.conversation && Array.isArray(args.conversation)) {
                 narrative = args.conversation.map((line: any) => {
@@ -18,7 +19,16 @@ export const TOOL_FLATTENERS: Record<string, ToolHistoryFlattener> = {
             if (args.narrations && Array.isArray(args.narrations)) {
                 narrative += args.narrations.map((n: any) => n.text).join(' ');
             }
-            return `[Narrative Scene Generated]: ${narrative || 'Scene advanced.'}`.trim();
+            if (args.choices && Array.isArray(args.choices)) {
+                narrative += ` Choices presented: ${args.choices.map((c: any) => c.text).join(' / ')}`;
+            }
+            if (args.diceRoll) {
+                narrative += ` Dice: ${args.diceRoll.diceNotation} for ${args.diceRoll.description || 'check'}`;
+            }
+            if (args.skillCheck) {
+                narrative += ` Skill check: ${args.skillCheck.stat} DC${args.skillCheck.difficulty} → ${args.skillCheck.succeeded ? 'passed' : 'failed'}`;
+            }
+            return `[Already shown ${type} frame]: ${narrative || 'Scene advanced.'}`.trim();
         }
     },
 

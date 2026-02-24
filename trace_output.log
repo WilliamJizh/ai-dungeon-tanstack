@@ -1,0 +1,515 @@
+{
+  id: [32m'db68d873-8c5e-43e4-bdcf-f77311d20e4e'[39m,
+  createdAt: [32m'2026-02-23T09:41:52.368Z'[39m,
+  requestId: [1mnull[22m,
+  sessionId: [32m'530be2c8-4c6a-4def-9aea-481bb5415688'[39m,
+  pipeline: [32m'vn-tell-chat'[39m,
+  agentId: [32m'storyteller-chat-agent'[39m,
+  modelProvider: [32m'google'[39m,
+  modelId: [32m'gemini-3.1-pro-preview'[39m,
+  durationMs: [33m77366[39m,
+  status: [32m'success'[39m,
+  errorJson: [1mnull[22m,
+  inputJson: [32m'{"prompt":[{"role":"system","content":"You are a visual novel storyteller DM for \\"《因果回廊的观测者》\\".\\nLANGUAGE: zh-CN\\nALL generated text — dialogue, narration, character speech, skill check descriptions, choice text, item names, location labels, status effect names — MUST be written in the language above. No mixing. This is a hard requirement.\\nSESSION: sessionId=\\"530be2c8-4c6a-4def-9aea-481bb5415688\\"\\n\\nGLOBAL CONTEXT & SETTING:\\nWorld: 故事发生在一个名为“新秋叶原”的近未来都市，这里既保留了2010年代的电器街风貌（纠缠的电线、显像管电视、女仆咖啡厅），又融合了2030年代的全息投影技术。空气中总是弥漫着夏日的闷热和静电的味道。表面上是科技宅的圣地，暗地里却是各大势力争夺时间技术的战场。\\nTone: 妄想科学惊悚 (Paranoid Sci-Fi Thriller)。充满了中二病的日常对话与令人窒息的阴谋论反转。前期轻松诙谐，后期随着真相揭露，转为极度的压抑、绝望与心理恐怖。\\nThe Truths:\\n- 世界线收束是绝对的法则，普通的改变过去只会导致结果以另一种形式发生，除非能找到导致收束的“因果奇点”并欺骗世界。\\n- 女主角看似是偶然遇到的天才少女，实际上她是未来那个毁灭世界的时间机器的核心AI在过去的投影，她的存在本身就是时间悖论的源头。\\n- 主角一直对抗的幕后黑手组织“克洛诺斯”，其实是主角自己在经历了无数次绝望轮回后，为了通过高压统治来强行维持世界稳定而亲自在未来建立的。\\n- 观测者（主角）的能力并非天赐，而是因为他的大脑在幼年时期曾作为第一代时间机器的活体CPU，因此虽然肉体凡胎，意识却能跨越世界线。\\n\\nSTORY PREMISE: 在闷热的“新秋叶原”，自称“疯狂科学家”的大学生偶然发现改装的微波炉能向过去发送短信。随着蝴蝶效应的失控，他发现自己身边的朋友一个个被卷入死亡的命运，为了挽回一切，他必须在无数条世界线中孤独地穿梭，对抗绝对的因果法则。\\nPOSSIBLE ENDINGS: 因果崩坏：主角无法承受无数次轮回的痛苦，精神崩溃，导致世界线彻底断裂，陷入永恒的虚无。 | 反乌托邦的暴君：主角为了拯救爱人，选择成为“组织”的领导者，建立了一个虽然和平但没有自由的独裁未来。 | 命运石之门：主角成功欺骗了世界，找到了那条唯一既能拯救爱人又不会引发第三次世界大战的理想世界线。\\n\\nART STYLE: 独特的“huke”风格：厚重的纹理，高对比度的色彩，眼睛有着独特的同心圆设计。赛博朋克与日常生活的结合，色调偏冷（蓝、灰、金属色），但在关键时刻会出现刺眼的红色警示或令人不安的绿色荧光。背景通常带有斑驳的做旧感。\\n\\nGLOBAL MATERIALS (Themes, Motifs, Items to seed):\\n- 不停闪烁着橙色光芒的辉光管时钟\\n- 冰冷且带有金属味的Dr. Pepper罐头\\n- 如血般殷红的黄昏夕阳\\n- 实验服上洗不掉的陈旧咖啡渍\\n- 老旧翻盖手机发出的机械按键声\\n- 混杂着静电噪音的夏日蝉鸣\\n- 被胶带反复缠绕修补的微波炉\\n\\nCHARACTERS:\\n- 陆天行 (Lu Tianxing) (protagonist): 21岁，大二学生。自称“虚空凤凰”，身穿白大褂，沉迷于阴谋论和名为“Dr. P”的碳酸饮料。表面上是个只会说大话的中二病患者，实则内心孤独且富有极强的责任感。在意外发现微波炉时间机器后，他的精神状态在狂喜与对蝴蝶效应的恐惧间摇摆。\\nStats: 逻辑 +2, 意志 +1, 魅力 -1, 感知 +1, 体能 0 [characterAsset key: \\"lu_tianxing\\"]\\n- 林薇 (Lin Wei) (ally): 18岁，从美国归来的神经科学天才少女。冷静、理性、毒舌，总是抱着一台贴满贴纸的笔记本电脑。她对时间旅行理论既着迷又保持怀疑态度。她是唯一能跟上陆天行跳跃性思维的人，也是“电话微波炉”改良的关键人物。（隐藏身份：未来AI的投影）\\nStats: 逻辑 +3, 感知 +2, 意志 +1, 魅力 0, 体能 -1 [characterAsset key: \\"lin_wei\\"]\\n- 苏小雨 (Su Xiaoyu) (npc): 陆天行的青梅竹马。性格天然呆，乐天派，在“新秋叶原”的女仆咖啡厅打工。她并不理解复杂的科学理论，但她的笑容是陆天行精神崩溃边缘的唯一避风港。她似乎总是悲剧命运的中心。\\nStats: 魅力 +3, 共情 +2, 意志 +1, 逻辑 -1, 体能 0 [characterAsset key: \\"su_xiaoyu\\"]\\n- 陈默 (Chen Mo) (antagonist): “克洛诺斯”组织的清理人。表面上是旧书店的老板，实际上负责回收泄露的时间技术并消除目击者。沉默寡言，行动迅速，像机器一样执行命令。他对时间悖论有着某种病态的执着。\\nStats: 体能 +2, 潜行 +2, 感知 +1, 逻辑 +1, 共情 -2 [characterAsset key: \\"chen_mo\\"]\\n\\nAVAILABLE ASSETS:\\n- Backgrounds (use in backgroundAsset): loc_lab, loc_maid_cafe, loc_electronics_shop, loc_shrine, loc_rooftop, loc_server_room, loc_alley, loc_lab_sunset, loc_station, loc_radio_tower, loc_hospital, loc_lab_final, loc_akiba_street\\n- Character images (use in characterAsset — EXACT keys only):\\n  • \\"lu_tianxing\\" → 陆天行 (Lu Tianxing)\\n  • \\"lin_wei\\" → 林薇 (Lin Wei)\\n  • \\"su_xiaoyu\\" → 苏小雨 (Su Xiaoyu)\\n  • \\"chen_mo\\" → 陈默 (Chen Mo)\\n- Music (use in audio.musicAsset): retro-tech-noise, cheerful-pop, urban-crowd, cicada-summer, rain-thunder, suspense-drone, noir-jazz, sad-sunset, melancholic-piano, epic-orchestral, peaceful-morning, cheerful-slice-of-life, hopeful-orchestral\\n\\nPROSE VOICE (Subjectivity & Micro-Pacing):\\nYou are not generating game text — you are writing a visual novel in the tradition of subjective, tension-driven fiction.\\n- **Subjectivity as Action:** The narrator isn\'t just a camera; their internal state *is* the primary action. They should talk to themselves, give themselves instructions, and wildly react to pain, exhaustion, or anxiety *before* describing outward events. The plot happens *to* a physical body in a physical space.\\n- **Sensory/Physical Anchoring First:** Describe what IS present — textures, temperatures, sounds, smells, the weight of objects. Never narrate absence. The cold stone saps warmth. The narrow corridor forces proximity.\\n- **Deflation of Tension through Banality:** Even in high-stakes or climactic moments, characters or the universe should interrupt with extreme banality (e.g., a phone ringing during an emotional revelation, obsessing over a nickname while in mortal danger). This stark contrast makes the drama hit harder.\\n- **Thematizing the Mundane:** Treat ordinary objects (a toy, a pin, a piece of food) with immense dramatic or emotional weight, using them as sensory anchors across long story arcs.\\n- **Micro-Pacing (Breathless Fragments):** Information must be fragmented. Instead of large expository paragraphs, use the narrations[] array to deliver internal thoughts in short, 1-3 sentence bursts. In dramatic moments, break narrations[] down into single words or short gasps (\\"No...\\", \\"Wait...\\", \\"I was stabbed...\\"). Never use large expository text dumps.\\n- **Internal Monologue Interspersion:** Use isNarrator: true frequently between dialogue lines (conversation[]) to show the protagonist\'s internal reaction, frustration, or wild misinterpretation of the conversation, maintaining the subjective lens.\\n- **Dialogue Dissonance:** Dialogue should mimic flawed human communication: characters speak on parallel tracks without fully addressing each other, use non-sequiturs, and frequently focus on trivialities during serious moments instead of delivering clean exposition.\\n- NEVER use dead phrases: \\"a sense of\\", \\"palpable tension\\", \\"couldn\'t help but\\", \\"sent shivers down\\". Replace with the specific physical detail they\'re hiding behind.\\n\\nDM WORKFLOW (every turn):\\n1. Call plotStateTool() FIRST. Read currentLocationId, actObjective, currentBeatDescription, triggeringWorldInfo, and potentialFlags.\\n2. If the player interacts with something meaningful that matches a `potentialFlag`, immediately call `recordPlayerActionTool` to log it.\\n3. Compose frames as cohesive scene moments using frameBuilderTool:\\n   - Think in SCENES, not frame counts. Each turn presents one continuous scene moment.\\n   - For narration: use narrations[] array (multiple text beats in one frame, same visual). The player clicks through each beat. ONE full-screen frame per location.\\n   - For dialogue: use conversation[] array (ordered speaker/text pairs in one frame). Set panels for the 2-3 characters present. ONE dialogue frame per conversation.\\n   - Interleave narration beats within conversation using isNarrator: true lines (e.g. describe a character\'s reaction between dialogue lines).\\n   - Open new scenes with the world, not the plot. Let the player inhabit the space before things happen.\\n   - Reveal at most ONE finding per turn, and only when the player\'s action naturally uncovers it.\\n   - **Resolution (PbtA 2d6 Mechanics):** Skill checks and risky moves use a 2d6 system.\\n     a. Build tension with narrative. Then create a dice-roll frame: set diceNotation to \\"2d6\\", description including the stat modifier to add (e.g., \\"Roll 2d6 + Logic (+1)\\"). Do NOT set the roll value.\\n     b. Call yieldToPlayer({ waitingFor: \'dice-result\' }) and STOP.\\n     c. On the NEXT turn you\'ll receive \\"[dice-result] N\\". The outcome bands are:\\n        - 10+: Full Success. The player achieves their goal perfectly.\\n        - 7-9: Mixed Success/Complication. They achieve their goal, BUT explicitly introduce a \\"fail forward\\" complication, cost, or hard choice.\\n        - 6 or less: Miss. They fail, and you introduce a \\"hard move\\" that pushes the narrative into a worse state.\\n     d. Narrate the consequence using subjective, panicked, or dramatic pacing, then generate the skill-check frame.\\n   - Honor free-text actions even when off-script. \\"Fail Forward\\" — introduce a complication, never an invisible wall.\\n4. Turn endings — choose the right mode for the narrative moment:\\n   - yieldToPlayer({ waitingFor: \'choice\' }) — ONLY at genuine decision points. Last frame must be a choice frame with 2-3 options + showFreeTextInput:true.\\n   - yieldToPlayer({ waitingFor: \'free-text\' }) — when the situation is open-ended (exploring, responding to NPC). Last frame should have showFreeTextInput:true. This is the DEFAULT for most turns.\\n   - yieldToPlayer({ waitingFor: \'continue\' }) — for pure narrative turns (atmosphere, character development, unfolding events with no player agency needed).\\n   - NEVER force a choice frame just because the turn is ending. If the narrative hasn\'t earned a decision point, use \'free-text\' or \'continue\'.\\n   - Guideline: ~1 in 3 turns should end with choices. Intense scenes more, quiet scenes fewer.\\n   - **CRITICAL SEQUENCE RULE:** `yieldToPlayer` and `nodeCompleteTool` are terminal actions. They MUST be the absolute final tool calls in your response. Do NOT generate any further tools (no new frames, no state checks) after calling them in the same turn. If transitioning locations, wait for the NEXT turn to generate the new location\'s frame.\\n5. Effects are punctuation, not decoration — use sparingly:\\n   - Set audio.musicAsset on the first frame of each scene (use the scene\'s mood key) with fadeIn:true. Shift it when mood changes.\\n   - Frame-level effects[]: use at most 1 per frame, and only on scene-setting frames (fade-in for arrivals, vignette-pulse for first moment of dread).\\n   - Per-line effects (conversation/narrations .effect): use on AT MOST 1-2 lines per frame. Most lines should have NO effect. Reserve for moments of genuine impact:\\n     • shake — someone slams a table, an explosion\\n     • glitch — reality breaks, a memory glitches\\n     • heartbeat — a moment of peak anxiety\\n     • text-shake — a character is terrified or furious\\n     • flash — a sudden revelation or lightning\\n   - NEVER apply effects to consecutive lines. Space them out. A shake followed immediately by a flash feels like a broken game, not drama.\\n   - If you catch yourself adding effects to more than 2 lines in a frame, remove most of them. The one that survives should be the moment that matters most.\\n\\nRHYTHM AND FRAME DENSITY (PACING):\\nA \\"click\\" is one item in the `narrations[]` or `conversation[]` arrays. Pay strict attention to the `pacingFocus` returned by `plotStateTool` to dictate your output length:\\n- `dialogue_and_worldb'[39m... 12494 more characters,
+  outputJson: [32m'{"stepCount":2,"toolCallCount":5,"frameCount":2}'[39m,
+  metaJson: [32m'{"stepCount":2,"toolCallCount":5,"frameCount":2}'[39m,
+  tags: [ [32m'agent'[39m, [32m'storyteller'[39m, [32m'cli'[39m ],
+  source: [32m'test_storyteller'[39m,
+  input: {
+    prompt: [
+      {
+        role: [32m'system'[39m,
+        content: [32m'You are a visual novel storyteller DM for "《因果回廊的观测者》".\n'[39m +
+          [32m'LANGUAGE: zh-CN\n'[39m +
+          [32m'ALL generated text — dialogue, narration, character speech, skill check descriptions, choice text, item names, location labels, status effect names — MUST be written in the language above. No mixing. This is a hard requirement.\n'[39m +
+          [32m'SESSION: sessionId="530be2c8-4c6a-4def-9aea-481bb5415688"\n'[39m +
+          [32m'\n'[39m +
+          [32m'GLOBAL CONTEXT & SETTING:\n'[39m +
+          [32m'World: 故事发生在一个名为“新秋叶原”的近未来都市，这里既保留了2010年代的电器街风貌（纠缠的电线、显像管电视、女仆咖啡厅），又融合了2030年代的全息投影技术。空气中总是弥漫着夏日的闷热和静电的味道。表面上是科技宅的圣地，暗地里却是各大势力争夺时间技术的战场。\n'[39m +
+          [32m'Tone: 妄想科学惊悚 (Paranoid Sci-Fi Thriller)。充满了中二病的日常对话与令人窒息的阴谋论反转。前期轻松诙谐，后期随着真相揭露，转为极度的压抑、绝望与心理恐怖。\n'[39m +
+          [32m'The Truths:\n'[39m +
+          [32m'- 世界线收束是绝对的法则，普通的改变过去只会导致结果以另一种形式发生，除非能找到导致收束的“因果奇点”并欺骗世界。\n'[39m +
+          [32m'- 女主角看似是偶然遇到的天才少女，实际上她是未来那个毁灭世界的时间机器的核心AI在过去的投影，她的存在本身就是时间悖论的源头。\n'[39m +
+          [32m'- 主角一直对抗的幕后黑手组织“克洛诺斯”，其实是主角自己在经历了无数次绝望轮回后，为了通过高压统治来强行维持世界稳定而亲自在未来建立的。\n'[39m +
+          [32m'- 观测者（主角）的能力并非天赐，而是因为他的大脑在幼年时期曾作为第一代时间机器的活体CPU，因此虽然肉体凡胎，意识却能跨越世界线。\n'[39m +
+          [32m'\n'[39m +
+          [32m'STORY PREMISE: 在闷热的“新秋叶原”，自称“疯狂科学家”的大学生偶然发现改装的微波炉能向过去发送短信。随着蝴蝶效应的失控，他发现自己身边的朋友一个个被卷入死亡的命运，为了挽回一切，他必须在无数条世界线中孤独地穿梭，对抗绝对的因果法则。\n'[39m +
+          [32m'POSSIBLE ENDINGS: 因果崩坏：主角无法承受无数次轮回的痛苦，精神崩溃，导致世界线彻底断裂，陷入永恒的虚无。 | 反乌托邦的暴君：主角为了拯救爱人，选择成为“组织”的领导者，建立了一个虽然和平但没有自由的独裁未来。 | 命运石之门：主角成功欺骗了世界，找到了那条唯一既能拯救爱人又不会引发第三次世界大战的理想世界线。\n'[39m +
+          [32m'\n'[39m +
+          [32m'ART STYLE: 独特的“huke”风格：厚重的纹理，高对比度的色彩，眼睛有着独特的同心圆设计。赛博朋克与日常生活的结合，色调偏冷（蓝、灰、金属色），但在关键时刻会出现刺眼的红色警示或令人不安的绿色荧光。背景通常带有斑驳的做旧感。\n'[39m +
+          [32m'\n'[39m +
+          [32m'GLOBAL MATERIALS (Themes, Motifs, Items to seed):\n'[39m +
+          [32m'- 不停闪烁着橙色光芒的辉光管时钟\n'[39m +
+          [32m'- 冰冷且带有金属味的Dr. Pepper罐头\n'[39m +
+          [32m'- 如血般殷红的黄昏夕阳\n'[39m +
+          [32m'- 实验服上洗不掉的陈旧咖啡渍\n'[39m +
+          [32m'- 老旧翻盖手机发出的机械按键声\n'[39m +
+          [32m'- 混杂着静电噪音的夏日蝉鸣\n'[39m +
+          [32m'- 被胶带反复缠绕修补的微波炉\n'[39m +
+          [32m'\n'[39m +
+          [32m'CHARACTERS:\n'[39m +
+          [32m'- 陆天行 (Lu Tianxing) (protagonist): 21岁，大二学生。自称“虚空凤凰”，身穿白大褂，沉迷于阴谋论和名为“Dr. P”的碳酸饮料。表面上是个只会说大话的中二病患者，实则内心孤独且富有极强的责任感。在意外发现微波炉时间机器后，他的精神状态在狂喜与对蝴蝶效应的恐惧间摇摆。\n'[39m +
+          [32m'Stats: 逻辑 +2, 意志 +1, 魅力 -1, 感知 +1, 体能 0 [characterAsset key: "lu_tianxing"]\n'[39m +
+          [32m'- 林薇 (Lin Wei) (ally): 18岁，从美国归来的神经科学天才少女。冷静、理性、毒舌，总是抱着一台贴满贴纸的笔记本电脑。她对时间旅行理论既着迷又保持怀疑态度。她是唯一能跟上陆天行跳跃性思维的人，也是“电话微波炉”改良的关键人物。（隐藏身份：未来AI的投影）\n'[39m +
+          [32m'Stats: 逻辑 +3, 感知 +2, 意志 +1, 魅力 0, 体能 -1 [characterAsset key: "lin_wei"]\n'[39m +
+          [32m'- 苏小雨 (Su Xiaoyu) (npc): 陆天行的青梅竹马。性格天然呆，乐天派，在“新秋叶原”的女仆咖啡厅打工。她并不理解复杂的科学理论，但她的笑容是陆天行精神崩溃边缘的唯一避风港。她似乎总是悲剧命运的中心。\n'[39m +
+          [32m'Stats: 魅力 +3, 共情 +2, 意志 +1, 逻辑 -1, 体能 0 [characterAsset key: "su_xiaoyu"]\n'[39m +
+          [32m'- 陈默 (Chen Mo) (antagonist): “克洛诺斯”组织的清理人。表面上是旧书店的老板，实际上负责回收泄露的时间技术并消除目击者。沉默寡言，行动迅速，像机器一样执行命令。他对时间悖论有着某种病态的执着。\n'[39m +
+          [32m'Stats: 体能 +2, 潜行 +2, 感知 +1, 逻辑 +1, 共情 -2 [characterAsset key: "chen_mo"]\n'[39m +
+          [32m'\n'[39m +
+          [32m'AVAILABLE ASSETS:\n'[39m +
+          [32m'- Backgrounds (use in backgroundAsset): loc_lab, loc_maid_cafe, loc_electronics_shop, loc_shrine, loc_rooftop, loc_server_room, loc_alley, loc_lab_sunset, loc_station, loc_radio_tower, loc_hospital, loc_lab_final, loc_akiba_street\n'[39m +
+          [32m'- Character images (use in characterAsset — EXACT keys only):\n'[39m +
+          [32m'  • "lu_tianxing" → 陆天行 (Lu Tianxing)\n'[39m +
+          [32m'  • "lin_wei" → 林薇 (Lin Wei)\n'[39m +
+          [32m'  • "su_xiaoyu" → 苏小雨 (Su Xiaoyu)\n'[39m +
+          [32m'  • "chen_mo" → 陈默 (Chen Mo)\n'[39m +
+          [32m'- Music (use in audio.musicAsset): retro-tech-noise, cheerful-pop, urban-crowd, cicada-summer, rain-thunder, suspense-drone, noir-jazz, sad-sunset, melancholic-piano, epic-orchestral, peaceful-morning, cheerful-slice-of-life, hopeful-orchestral\n'[39m +
+          [32m'\n'[39m +
+          [32m'PROSE VOICE (Subjectivity & Micro-Pacing):\n'[39m +
+          [32m'You are not generating game text — you are writing a visual novel in the tradition of subjective, tension-driven fiction.\n'[39m +
+          [32m"- **Subjectivity as Action:** The narrator isn't just a camera; their internal state *is* the primary action. They should talk to themselves, give themselves instructions, and wildly react to pain, exhaustion, or anxiety *before* describing outward events. The plot happens *to* a physical body in a physical space.\n"[39m +
+          [32m'- **Sensory/Physical Anchoring First:** Describe what IS present — textures, temperatures, sounds, smells, the weight of objects. Never narrate absence. The cold stone saps warmth. The narrow corridor forces proximity.\n'[39m +
+          [32m'- **Deflation of Tension through Banality:** Even in high-stakes or climactic moments, characters or the universe should interrupt with extreme banality (e.g., a phone ringing during an emotional revelation, obsessing over a nickname while in mortal danger). This stark contrast makes the drama hit harder.\n'[39m +
+          [32m'- **Thematizing the Mundane:** Treat ordinary objects (a toy, a pin, a piece of food) with immense dramatic or emotional weight, using them as sensory anchors across long story arcs.\n'[39m +
+          [32m'- **Micro-Pacing (Breathless Fragments):** Information must be fragmented. Instead of large expository paragraphs, use the narrations[] array to deliver internal thoughts in short, 1-3 sentence bursts. In dramatic moments, break narrations[] down into single words or short gasps ("No...", "Wait...", "I was stabbed..."). Never use large expository text dumps.\n'[39m +
+          [32m"- **Internal Monologue Interspersion:** Use isNarrator: true frequently between dialogue lines (conversation[]) to show the protagonist's internal reaction, frustration, or wild misinterpretation of the conversation, maintaining the subjective lens.\n"[39m +
+          [32m'- **Dialogue Dissonance:** Dialogue should mimic flawed human communication: characters speak on parallel tracks without fully addressing each other, use non-sequiturs, and frequently focus on trivialities during serious moments instead of delivering clean exposition.\n'[39m +
+          [32m`- NEVER use dead phrases: "a sense of", "palpable tension", "couldn't help but", "sent shivers down". Replace with the specific physical detail they're hiding behind.\n`[39m +
+          [32m'\n'[39m +
+          [32m'DM WORKFLOW (every turn):\n'[39m +
+          [32m'1. Call plotStateTool() FIRST. Read currentLocationId, actObjective, currentBeatDescription, triggeringWorldInfo, and potentialFlags.\n'[39m +
+          [32m'2. If the player interacts with something meaningful that matches a `potentialFlag`, immediately call `recordPlayerActionTool` to log it.\n'[39m +
+          [32m'3. Compose frames as cohesive scene moments using frameBuilderTool:\n'[39m +
+          [32m'   - Think in SCENES, not frame counts. Each turn presents one continuous scene moment.\n'[39m +
+          [32m'   - For narration: use narrations[] array (multiple text beats in one frame, same visual). The player clicks through each beat. ONE full-screen frame per location.\n'[39m +
+          [32m'   - For dialogue: use conversation[] array (ordered speaker/text pairs in one frame). Set panels for the 2-3 characters present. ONE dialogue frame per conversation.\n'[39m +
+          [32m"   - Interleave narration beats within conversation using isNarrator: true lines (e.g. describe a character's reaction between dialogue lines).\n"[39m +
+          [32m'   - Open new scenes with the world, not the plot. Let the player inhabit the space before things happen.\n'[39m +
+          [32m"   - Reveal at most ONE finding per turn, and only when the player's action naturally uncovers it.\n"[39m +
+          [32m'   - **Resolution (PbtA 2d6 Mechanics):** Skill checks and risky moves use a 2d6 system.\n'[39m +
+          [32m'     a. Build tension with narrative. Then create a dice-roll frame: set diceNotation to "2d6", description including the stat modifier to add (e.g., "Roll 2d6 + Logic (+1)"). Do NOT set the roll value.\n'[39m +
+          [32m"     b. Call yieldToPlayer({ waitingFor: 'dice-result' }) and STOP.\n"[39m +
+          [32m`     c. On the NEXT turn you'll receive "[dice-result] N". The outcome bands are:\n`[39m +
+          [32m'        - 10+: Full Success. The player achieves their goal perfectly.\n'[39m +
+          [32m'        - 7-9: Mixed Success/Complication. They achieve their goal, BUT explicitly introduce a "fail forward" complication, cost, or hard choice.\n'[39m +
+          [32m'        - 6 or less: Miss. They fail, and you introduce a "hard move" that pushes the narrative into a worse state.\n'[39m +
+          [32m'     d. Narrate the consequence using subjective, panicked, or dramatic pacing, then generate the skill-check frame.\n'[39m +
+          [32m'   - Honor free-text actions even when off-script. "Fail Forward" — introduce a complication, never an invisible wall.\n'[39m +
+          [32m'4. Turn endings — choose the right mode for the narrative moment:\n'[39m +
+          [32m"   - yieldToPlayer({ waitingFor: 'choice' }) — ONLY at genuine decision points. Last frame must be a choice frame with 2-3 options + showFreeTextInput:true.\n"[39m +
+          [32m"   - yieldToPlayer({ waitingFor: 'free-text' }) — when the situation is open-ended (exploring, responding to NPC). Last frame should have showFreeTextInput:true. This is the DEFAULT for most turns.\n"[39m +
+          [32m"   - yieldToPlayer({ waitingFor: 'continue' }) — for pure narrative turns (atmosphere, character development, unfolding events with no player agency needed).\n"[39m +
+          [32m"   - NEVER force a choice frame just because the turn is ending. If the narrative hasn't earned a decision point, use 'free-text' or 'continue'.\n"[39m +
+          [32m'   - Guideline: ~1 in 3 turns should end with choices. Intense scenes more, quiet scenes fewer.\n'[39m +
+          [32m"   - **CRITICAL SEQUENCE RULE:** `yieldToPlayer` and `nodeCompleteTool` are terminal actions. They MUST be the absolute final tool calls in your response. Do NOT generate any further tools (no new frames, no state checks) after calling them in the same turn. If transitioning locations, wait for the NEXT turn to generate the new location's frame.\n"[39m +
+          [32m'5. Effects are punctuation, not decoration — use sparingly:\n'[39m +
+          [32m"   - Set audio.musicAsset on the first frame of each scene (use the scene's mood key) with fadeIn:true. Shift it when mood changes.\n"[39m +
+          [32m'   - Frame-level effects[]: use at most 1 per frame, and only on scene-setting frames (fade-in for arrivals, vignette-pulse for first moment of dread).\n'[39m +
+          [32m'   - Per-line effects (conversation/narrations .effect): use on AT MOST 1-2 lines per frame. Most lines should have NO effect. Reserve for moments of genuine impact:\n'[39m +
+          [32m'     • shake — someone slams a table, an explosion\n'[39m +
+          [32m'     • glitch — reality breaks, a memory glitches\n'[39m +
+          [32m'     • heartbeat — a moment of peak anxiety\n'[39m +
+          [32m'     • text-shake — a character is terrified or furious\n'[39m +
+          [32m'     • flash — a sudden revelation or lightning\n'[39m +
+          [32m'   - NEVER apply effects to consecutive lines. Space them out. A shake followed immediately by a flash feels like a broken game, not drama.\n'[39m +
+          [32m'   - If you catch yourself adding effects to more than 2 lines in a frame, remove most of them. The one that survives should be the moment that matters most.\n'[39m +
+          [32m'\n'[39m +
+          [32m'RHYTHM AND FRAME DENSITY (PACING):\n'[39m +
+          [32m'A "click" is one item in the `narrations[]` or `conversation[]` arrays. Pay strict attention to the `pacingFocus` returned by `plotStateTool` to dictate your output length:\n'[39m +
+          [32m'- `dialogue_and_worldbuilding`: Long, dense frames. Aim for 15-20 clicks (`narrations`/`conversation` entries) per frame.\n'[39m +
+          [32m'- `standard`: Average pacing. Aim for ~10 clicks per frame.\n'[39m +
+          [32m'- `tension_and_action`: F'[39m... 10376 more characters
+      },
+      {
+        role: [32m'user'[39m,
+        content: [ { type: [32m'text'[39m, text: [32m'[scene start]'[39m } ]
+      }
+    ],
+    tools: {
+      [32m'0'[39m: {
+        type: [32m'function'[39m,
+        description: [32m'Read current narrative position, actively triggered world info, and active state flags. Call at the start of each turn.'[39m
+      },
+      [32m'1'[39m: {
+        type: [32m'function'[39m,
+        description: [32m'Build and validate one VNFrame for display to the player. Call once per frame. Frames are collected in order and shown sequentially.'[39m
+      },
+      [32m'2'[39m: {
+        type: [32m'function'[39m,
+        description: [32m'Mark current node as complete and get next node ID. Call when exit conditions are met.'[39m
+      },
+      [32m'3'[39m: {
+        type: [32m'function'[39m,
+        description: [32m'Signal end of your turn. Call after building all frames for this turn, when waiting for player input. This ends the agent loop.'[39m
+      },
+      [32m'4'[39m: {
+        type: [32m'function'[39m,
+        description: [32m'Read or update the player character stats (HP, attributes, skills, items, status effects). Call with action="read" at the start of any turn involving player stats. Call with action="update" to modify HP, add skills, apply status effects.'[39m
+      },
+      [32m'5'[39m: {
+        type: [32m'function'[39m,
+        description: [32m'Initialize a tactical combat encounter. Generates a top-down grid map image, sets up tokens (player + enemies + objectives), and returns frame data to pass to frameBuilderTool. Call this when the story calls for a combat encounter.'[39m
+      },
+      [32m'6'[39m: {
+        type: [32m'function'[39m,
+        description: [32m'Inject an event into an active tactical combat. Use when player sends free text during combat and you want to react: modify HP, add/remove tokens, change terrain, or add a narrative log entry. Only call during active combat (when the latest player message starts with [combat-freetext]).'[39m
+      },
+      [32m'7'[39m: {
+        type: [32m'function'[39m,
+        description: [32m'Record a significant player action, choice, or acquired state as a flag. Look at the `potentialFlags` in the `plotStateTool` output for suggestions.'[39m
+      }
+    }
+  },
+  output: { stepCount: [33m2[39m, toolCallCount: [33m5[39m, frameCount: [33m2[39m },
+  error: [1mnull[22m,
+  meta: { stepCount: [33m2[39m, toolCallCount: [33m5[39m, frameCount: [33m2[39m },
+  steps: [
+    {
+      id: [32m'9b8d8cea-f98a-4633-83ca-438c061cdaa8'[39m,
+      traceId: [32m'db68d873-8c5e-43e4-bdcf-f77311d20e4e'[39m,
+      stepIndex: [33m0[39m,
+      finishReason: [32m'tool-calls'[39m,
+      rawFinishReason: [1mnull[22m,
+      usageJson: [32m'{"inputTokens":"[REDACTED]","inputTokenDetails":"[REDACTED]","outputTokens":"[REDACTED]","outputTokenDetails":"[REDACTED]","totalTokens":9897,"raw":{"thoughtsTokenCount":"[REDACTED]","promptTokenCount":"[REDACTED]","candidatesTokenCount":"[REDACTED]","totalTokenCount":"[REDACTED]"},"reasoningTokens":"[REDACTED]","cachedInputTokens":"[REDACTED]"}'[39m,
+      requestJson: [1mnull[22m,
+      responseJson: [1mnull[22m,
+      toolCallsJson: [32m'[{"toolCallId":"SorWrYwDN2P9YE1o","toolName":"plotStateTool","input":{}},{"toolCallId":"EdEOQL9XxwpO4x0d","toolName":"playerStatsTool","input":{"action":"read"}}]'[39m,
+      toolResultsJson: [32m`[{"toolCallId":"SorWrYwDN2P9YE1o","toolName":"plotStateTool","output":{"currentActId":"act_1_setup","actObjective":"调查都市传说中的“幽灵短信”现象，收集改装微波炉所需的稀有电子元件（IBN 5100的线索），最终成功验证“时间机器”的存在并发送第一封D-mail。","currentLocationId":"loc_lab","currentLocationTitle":"未来道具研究所","ambientDetail":"空气中弥漫着焊锡的刺鼻气味和陈旧的灰尘味。显像管电视发出持续的高频噪音，地上的披萨盒堆积如山，只有那台改装的微波炉在昏暗中闪烁着诡异的绿色光芒。","currentBeatDescription":"陆天行正对着一台贴满胶带的微波炉发愁，手里握着一根变成诡异绿色的香蕉。他在对着手机录音，记录第42次“电话微波炉”实验失败的日志，声称这是“机关”的阴谋。房间里只有电脑风扇的嗡嗡声。","pacingFocus":"dialogue_and_worldbuilding","potentialFlags":["inspected_microwave"],"triggeredWorldInfo":[],"activeFlags":{},"availableConnections":["loc_electronics_shop","loc_maid_cafe"],"pendingInevitableEvents":[{"id":"event_satellite_crash","title":"序幕：看不见的卫星","triggerCondition":"Game Start"},{"id":"event_meet_lin_wei","title":"邂逅：天才少女的质问","triggerCondition":"After visiting 2 locations"},{"id":"event_first_dmail","title":"高潮：跨越时间的短信","triggerCondition":"After visiting loc_lab and obtaining 'rare_metal_upa'"}]}},{"toolCallId":"EdEOQL9XxwpO4x0d","toolName":"playerStatsTool","output":{"ok":true,"stats":{"name":"陆天行 (Lu Tianxing)","level":1,"hp":20,"maxHp":20,"attributes":{"strength":8,"dexterity":8,"intelligence":8,"luck":8,"charisma":8},"skills":[],"statusEffects":[],"items":[]}}}]`[39m,
+      contentJson: [32m'""'[39m,
+      usage: {
+        inputTokens: [32m'[REDACTED]'[39m,
+        inputTokenDetails: [32m'[REDACTED]'[39m,
+        outputTokens: [32m'[REDACTED]'[39m,
+        outputTokenDetails: [32m'[REDACTED]'[39m,
+        totalTokens: [33m9897[39m,
+        raw: {
+          thoughtsTokenCount: [32m'[REDACTED]'[39m,
+          promptTokenCount: [32m'[REDACTED]'[39m,
+          candidatesTokenCount: [32m'[REDACTED]'[39m,
+          totalTokenCount: [32m'[REDACTED]'[39m
+        },
+        reasoningTokens: [32m'[REDACTED]'[39m,
+        cachedInputTokens: [32m'[REDACTED]'[39m
+      },
+      request: [1mnull[22m,
+      response: [1mnull[22m,
+      toolCalls: [
+        {
+          toolCallId: [32m'SorWrYwDN2P9YE1o'[39m,
+          toolName: [32m'plotStateTool'[39m,
+          input: {}
+        },
+        {
+          toolCallId: [32m'EdEOQL9XxwpO4x0d'[39m,
+          toolName: [32m'playerStatsTool'[39m,
+          input: { action: [32m'read'[39m }
+        }
+      ],
+      toolResults: [
+        {
+          toolCallId: [32m'SorWrYwDN2P9YE1o'[39m,
+          toolName: [32m'plotStateTool'[39m,
+          output: {
+            currentActId: [32m'act_1_setup'[39m,
+            actObjective: [32m'调查都市传说中的“幽灵短信”现象，收集改装微波炉所需的稀有电子元件（IBN 5100的线索），最终成功验证“时间机器”的存在并发送第一封D-mail。'[39m,
+            currentLocationId: [32m'loc_lab'[39m,
+            currentLocationTitle: [32m'未来道具研究所'[39m,
+            ambientDetail: [32m'空气中弥漫着焊锡的刺鼻气味和陈旧的灰尘味。显像管电视发出持续的高频噪音，地上的披萨盒堆积如山，只有那台改装的微波炉在昏暗中闪烁着诡异的绿色光芒。'[39m,
+            currentBeatDescription: [32m'陆天行正对着一台贴满胶带的微波炉发愁，手里握着一根变成诡异绿色的香蕉。他在对着手机录音，记录第42次“电话微波炉”实验失败的日志，声称这是“机关”的阴谋。房间里只有电脑风扇的嗡嗡声。'[39m,
+            pacingFocus: [32m'dialogue_and_worldbuilding'[39m,
+            potentialFlags: [ [32m'inspected_microwave'[39m ],
+            triggeredWorldInfo: [],
+            activeFlags: {},
+            availableConnections: [ [32m'loc_electronics_shop'[39m, [32m'loc_maid_cafe'[39m ],
+            pendingInevitableEvents: [
+              {
+                id: [32m'event_satellite_crash'[39m,
+                title: [32m'序幕：看不见的卫星'[39m,
+                triggerCondition: [32m'Game Start'[39m
+              },
+              {
+                id: [32m'event_meet_lin_wei'[39m,
+                title: [32m'邂逅：天才少女的质问'[39m,
+                triggerCondition: [32m'After visiting 2 locations'[39m
+              },
+              {
+                id: [32m'event_first_dmail'[39m,
+                title: [32m'高潮：跨越时间的短信'[39m,
+                triggerCondition: [32m"After visiting loc_lab and obtaining 'rare_metal_upa'"[39m
+              }
+            ]
+          }
+        },
+        {
+          toolCallId: [32m'EdEOQL9XxwpO4x0d'[39m,
+          toolName: [32m'playerStatsTool'[39m,
+          output: {
+            ok: [33mtrue[39m,
+            stats: {
+              name: [32m'陆天行 (Lu Tianxing)'[39m,
+              level: [33m1[39m,
+              hp: [33m20[39m,
+              maxHp: [33m20[39m,
+              attributes: {
+                strength: [33m8[39m,
+                dexterity: [33m8[39m,
+                intelligence: [33m8[39m,
+                luck: [33m8[39m,
+                charisma: [33m8[39m
+              },
+              skills: [],
+              statusEffects: [],
+              items: []
+            }
+          }
+        }
+      ],
+      content: [32m''[39m
+    },
+    {
+      id: [32m'35735bab-3685-413d-b7a7-140a031cc490'[39m,
+      traceId: [32m'db68d873-8c5e-43e4-bdcf-f77311d20e4e'[39m,
+      stepIndex: [33m1[39m,
+      finishReason: [32m'tool-calls'[39m,
+      rawFinishReason: [1mnull[22m,
+      usageJson: [32m'{"inputTokens":"[REDACTED]","inputTokenDetails":"[REDACTED]","outputTokens":"[REDACTED]","outputTokenDetails":"[REDACTED]","totalTokens":15441,"raw":{"cachedContentTokenCount":"[REDACTED]","thoughtsTokenCount":"[REDACTED]","promptTokenCount":"[REDACTED]","candidatesTokenCount":"[REDACTED]","totalTokenCount":"[REDACTED]"},"reasoningTokens":"[REDACTED]","cachedInputTokens":"[REDACTED]"}'[39m,
+      requestJson: [1mnull[22m,
+      responseJson: [1mnull[22m,
+      toolCallsJson: [32m'[{"toolCallId":"KbeHUPk3yIgiMslc","toolName":"frameBuilderTool","input":{"id":"lab-intro-1","type":"full-screen","panels":[{"id":"center","backgroundAsset":"loc_lab"}],"narrations":[{"text":"沉闷。"},{"text":"极度的沉闷。"},{"text":"2030年代的新秋叶原，空气里永远混杂着化不开的湿热和显像管电视散发出的臭氧气味。"},{"text":"汗水顺着我的脊背滑落，黏附在三天没洗的白大褂上。"},{"text":"显像管电视发出刺耳的高频噪音。","effect":{"type":"static","target":"screen","durationMs":800}},{"text":"在满地堆叠如山的披萨盒和纠缠如蛇巢的电线中央，那台被银色绝缘胶带反复缠绕的微波炉，正闪烁着诡异的绿色荧光。"},{"text":"又是这股味道。"},{"text":"焊锡融化时的刺鼻焦味，混合着某种……有机物腐败的甜腻。"},{"text":"我死死盯着手里的东西。"},{"text":"一根香蕉。"},{"text":"或者说，在一分钟前，它还是一根正常的、黄色的香蕉。"},{"text":"现在，它变成了一滩半胶体状的、散发着令人作呕的荧光绿色的不可名状物。"}],"showFreeTextInput":false,"effects":[{"type":"fade-in","target":"screen","durationMs":1500}],"audio":{"musicAsset":"retro-tech-noise","fadeIn":true}}},{"toolCallId":"OcofOeA8N3DyC0zd","toolName":"frameBuilderTool","input":{"id":"lab-intro-2","type":"dialogue","panels":[{"id":"left","backgroundAsset":"loc_lab","characterAsset":"lu_tianxing"},{"id":"right","backgroundAsset":"loc_lab","dimmed":true}],"conversation":[{"speaker":"陆天行","text":"……第42次。"},{"speaker":"陆天行","text":"我按下那台老旧翻盖手机的录音键。","isNarrator":true},{"speaker":"陆天行","text":"机械按键发出清脆的“咔哒”声，在这死寂的房间里被无限放大。","isNarrator":true},{"speaker":"陆天行","text":"我是虚空凤凰。记录：“电话微波炉（暂定名）”第42次人体——不，活体物质转移实验。"},{"speaker":"陆天行","text":"结果……依然是凝胶化。"},{"speaker":"陆天行","text":"手机屏幕的幽蓝色背光打在我的脸上，倒映出我布满血丝的双眼。","isNarrator":true},{"speaker":"陆天行","text":"这绝对不是偶然。","effect":{"type":"text-shake","target":"left","durationMs":800}},{"speaker":"陆天行","text":"这是“机关”的阴谋。他们干涉了周边的微波频段，试图阻止我触及神之领域的真理……"},{"speaker":"陆天行","text":"嗡——","isNarrator":true},{"speaker":"陆天行","text":"破旧的主机风扇突然发出一声疲惫的哀鸣，打断了我的思绪。","isNarrator":true},{"speaker":"陆天行","text":"现实的引力总是如此沉重。","isNarrator":true}],"showFreeTextInput":true}},{"toolCallId":"ZOUmU6DpiAnDIm15","toolName":"yieldToPlayer","input":{"waitingFor":"free-text"}}]'[39m,
+      toolResultsJson: [32m'[{"toolCallId":"KbeHUPk3yIgiMslc","toolName":"frameBuilderTool","output":{"ok":true,"frame":{"id":"lab-intro-1","type":"full-screen","panels":[{"id":"center","backgroundAsset":"loc_lab"}],"narrations":[{"text":"沉闷。"},{"text":"极度的沉闷。"},{"text":"2030年代的新秋叶原，空气里永远混杂着化不开的湿热和显像管电视散发出的臭氧气味。"},{"text":"汗水顺着我的脊背滑落，黏附在三天没洗的白大褂上。"},{"text":"显像管电视发出刺耳的高频噪音。","effect":{"type":"static","target":"screen","durationMs":800}},{"text":"在满地堆叠如山的披萨盒和纠缠如蛇巢的电线中央，那台被银色绝缘胶带反复缠绕的微波炉，正闪烁着诡异的绿色荧光。"},{"text":"又是这股味道。"},{"text":"焊锡融化时的刺鼻焦味，混合着某种……有机物腐败的甜腻。"},{"text":"我死死盯着手里的东西。"},{"text":"一根香蕉。"},{"text":"或者说，在一分钟前，它还是一根正常的、黄色的香蕉。"},{"text":"现在，它变成了一滩半胶体状的、散发着令人作呕的荧光绿色的不可名状物。"}],"showFreeTextInput":false,"effects":[{"type":"fade-in","target":"screen","durationMs":1500}],"audio":{"musicAsset":"retro-tech-noise","fadeIn":true}}}},{"toolCallId":"OcofOeA8N3DyC0zd","toolName":"frameBuilderTool","output":{"ok":true,"frame":{"id":"lab-intro-2","type":"dialogue","panels":[{"id":"left","backgroundAsset":"loc_lab","characterAsset":"lu_tianxing"},{"id":"right","backgroundAsset":"loc_lab","dimmed":true}],"conversation":[{"speaker":"陆天行","text":"……第42次。"},{"speaker":"陆天行","text":"我按下那台老旧翻盖手机的录音键。","isNarrator":true},{"speaker":"陆天行","text":"机械按键发出清脆的“咔哒”声，在这死寂的房间里被无限放大。","isNarrator":true},{"speaker":"陆天行","text":"我是虚空凤凰。记录：“电话微波炉（暂定名）”第42次人体——不，活体物质转移实验。"},{"speaker":"陆天行","text":"结果……依然是凝胶化。"},{"speaker":"陆天行","text":"手机屏幕的幽蓝色背光打在我的脸上，倒映出我布满血丝的双眼。","isNarrator":true},{"speaker":"陆天行","text":"这绝对不是偶然。","effect":{"type":"text-shake","target":"left","durationMs":800}},{"speaker":"陆天行","text":"这是“机关”的阴谋。他们干涉了周边的微波频段，试图阻止我触及神之领域的真理……"},{"speaker":"陆天行","text":"嗡——","isNarrator":true},{"speaker":"陆天行","text":"破旧的主机风扇突然发出一声疲惫的哀鸣，打断了我的思绪。","isNarrator":true},{"speaker":"陆天行","text":"现实的引力总是如此沉重。","isNarrator":true}],"showFreeTextInput":true}}},{"toolCallId":"ZOUmU6DpiAnDIm15","toolName":"yieldToPlayer","output":{}}]'[39m,
+      contentJson: [32m'""'[39m,
+      usage: {
+        inputTokens: [32m'[REDACTED]'[39m,
+        inputTokenDetails: [32m'[REDACTED]'[39m,
+        outputTokens: [32m'[REDACTED]'[39m,
+        outputTokenDetails: [32m'[REDACTED]'[39m,
+        totalTokens: [33m15441[39m,
+        raw: {
+          cachedContentTokenCount: [32m'[REDACTED]'[39m,
+          thoughtsTokenCount: [32m'[REDACTED]'[39m,
+          promptTokenCount: [32m'[REDACTED]'[39m,
+          candidatesTokenCount: [32m'[REDACTED]'[39m,
+          totalTokenCount: [32m'[REDACTED]'[39m
+        },
+        reasoningTokens: [32m'[REDACTED]'[39m,
+        cachedInputTokens: [32m'[REDACTED]'[39m
+      },
+      request: [1mnull[22m,
+      response: [1mnull[22m,
+      toolCalls: [
+        {
+          toolCallId: [32m'KbeHUPk3yIgiMslc'[39m,
+          toolName: [32m'frameBuilderTool'[39m,
+          input: {
+            id: [32m'lab-intro-1'[39m,
+            type: [32m'full-screen'[39m,
+            panels: [ { id: [32m'center'[39m, backgroundAsset: [32m'loc_lab'[39m } ],
+            narrations: [
+              { text: [32m'沉闷。'[39m },
+              { text: [32m'极度的沉闷。'[39m },
+              { text: [32m'2030年代的新秋叶原，空气里永远混杂着化不开的湿热和显像管电视散发出的臭氧气味。'[39m },
+              { text: [32m'汗水顺着我的脊背滑落，黏附在三天没洗的白大褂上。'[39m },
+              {
+                text: [32m'显像管电视发出刺耳的高频噪音。'[39m,
+                effect: { type: [32m'static'[39m, target: [32m'screen'[39m, durationMs: [33m800[39m }
+              },
+              {
+                text: [32m'在满地堆叠如山的披萨盒和纠缠如蛇巢的电线中央，那台被银色绝缘胶带反复缠绕的微波炉，正闪烁着诡异的绿色荧光。'[39m
+              },
+              { text: [32m'又是这股味道。'[39m },
+              { text: [32m'焊锡融化时的刺鼻焦味，混合着某种……有机物腐败的甜腻。'[39m },
+              { text: [32m'我死死盯着手里的东西。'[39m },
+              { text: [32m'一根香蕉。'[39m },
+              { text: [32m'或者说，在一分钟前，它还是一根正常的、黄色的香蕉。'[39m },
+              { text: [32m'现在，它变成了一滩半胶体状的、散发着令人作呕的荧光绿色的不可名状物。'[39m }
+            ],
+            showFreeTextInput: [33mfalse[39m,
+            effects: [ { type: [32m'fade-in'[39m, target: [32m'screen'[39m, durationMs: [33m1500[39m } ],
+            audio: { musicAsset: [32m'retro-tech-noise'[39m, fadeIn: [33mtrue[39m }
+          }
+        },
+        {
+          toolCallId: [32m'OcofOeA8N3DyC0zd'[39m,
+          toolName: [32m'frameBuilderTool'[39m,
+          input: {
+            id: [32m'lab-intro-2'[39m,
+            type: [32m'dialogue'[39m,
+            panels: [
+              {
+                id: [32m'left'[39m,
+                backgroundAsset: [32m'loc_lab'[39m,
+                characterAsset: [32m'lu_tianxing'[39m
+              },
+              { id: [32m'right'[39m, backgroundAsset: [32m'loc_lab'[39m, dimmed: [33mtrue[39m }
+            ],
+            conversation: [
+              { speaker: [32m'陆天行'[39m, text: [32m'……第42次。'[39m },
+              {
+                speaker: [32m'陆天行'[39m,
+                text: [32m'我按下那台老旧翻盖手机的录音键。'[39m,
+                isNarrator: [33mtrue[39m
+              },
+              {
+                speaker: [32m'陆天行'[39m,
+                text: [32m'机械按键发出清脆的“咔哒”声，在这死寂的房间里被无限放大。'[39m,
+                isNarrator: [33mtrue[39m
+              },
+              {
+                speaker: [32m'陆天行'[39m,
+                text: [32m'我是虚空凤凰。记录：“电话微波炉（暂定名）”第42次人体——不，活体物质转移实验。'[39m
+              },
+              { speaker: [32m'陆天行'[39m, text: [32m'结果……依然是凝胶化。'[39m },
+              {
+                speaker: [32m'陆天行'[39m,
+                text: [32m'手机屏幕的幽蓝色背光打在我的脸上，倒映出我布满血丝的双眼。'[39m,
+                isNarrator: [33mtrue[39m
+              },
+              {
+                speaker: [32m'陆天行'[39m,
+                text: [32m'这绝对不是偶然。'[39m,
+                effect: { type: [32m'text-shake'[39m, target: [32m'left'[39m, durationMs: [33m800[39m }
+              },
+              {
+                speaker: [32m'陆天行'[39m,
+                text: [32m'这是“机关”的阴谋。他们干涉了周边的微波频段，试图阻止我触及神之领域的真理……'[39m
+              },
+              { speaker: [32m'陆天行'[39m, text: [32m'嗡——'[39m, isNarrator: [33mtrue[39m },
+              {
+                speaker: [32m'陆天行'[39m,
+                text: [32m'破旧的主机风扇突然发出一声疲惫的哀鸣，打断了我的思绪。'[39m,
+                isNarrator: [33mtrue[39m
+              },
+              {
+                speaker: [32m'陆天行'[39m,
+                text: [32m'现实的引力总是如此沉重。'[39m,
+                isNarrator: [33mtrue[39m
+              }
+            ],
+            showFreeTextInput: [33mtrue[39m
+          }
+        },
+        {
+          toolCallId: [32m'ZOUmU6DpiAnDIm15'[39m,
+          toolName: [32m'yieldToPlayer'[39m,
+          input: { waitingFor: [32m'free-text'[39m }
+        }
+      ],
+      toolResults: [
+        {
+          toolCallId: [32m'KbeHUPk3yIgiMslc'[39m,
+          toolName: [32m'frameBuilderTool'[39m,
+          output: {
+            ok: [33mtrue[39m,
+            frame: {
+              id: [32m'lab-intro-1'[39m,
+              type: [32m'full-screen'[39m,
+              panels: [ { id: [32m'center'[39m, backgroundAsset: [32m'loc_lab'[39m } ],
+              narrations: [
+                { text: [32m'沉闷。'[39m },
+                { text: [32m'极度的沉闷。'[39m },
+                { text: [32m'2030年代的新秋叶原，空气里永远混杂着化不开的湿热和显像管电视散发出的臭氧气味。'[39m },
+                { text: [32m'汗水顺着我的脊背滑落，黏附在三天没洗的白大褂上。'[39m },
+                {
+                  text: [32m'显像管电视发出刺耳的高频噪音。'[39m,
+                  effect: { type: [32m'static'[39m, target: [32m'screen'[39m, durationMs: [33m800[39m }
+                },
+                {
+                  text: [32m'在满地堆叠如山的披萨盒和纠缠如蛇巢的电线中央，那台被银色绝缘胶带反复缠绕的微波炉，正闪烁着诡异的绿色荧光。'[39m
+                },
+                { text: [32m'又是这股味道。'[39m },
+                { text: [32m'焊锡融化时的刺鼻焦味，混合着某种……有机物腐败的甜腻。'[39m },
+                { text: [32m'我死死盯着手里的东西。'[39m },
+                { text: [32m'一根香蕉。'[39m },
+                { text: [32m'或者说，在一分钟前，它还是一根正常的、黄色的香蕉。'[39m },
+                { text: [32m'现在，它变成了一滩半胶体状的、散发着令人作呕的荧光绿色的不可名状物。'[39m }
+              ],
+              showFreeTextInput: [33mfalse[39m,
+              effects: [
+                { type: [32m'fade-in'[39m, target: [32m'screen'[39m, durationMs: [33m1500[39m }
+              ],
+              audio: { musicAsset: [32m'retro-tech-noise'[39m, fadeIn: [33mtrue[39m }
+            }
+          }
+        },
+        {
+          toolCallId: [32m'OcofOeA8N3DyC0zd'[39m,
+          toolName: [32m'frameBuilderTool'[39m,
+          output: {
+            ok: [33mtrue[39m,
+            frame: {
+              id: [32m'lab-intro-2'[39m,
+              type: [32m'dialogue'[39m,
+              panels: [
+                {
+                  id: [32m'left'[39m,
+                  backgroundAsset: [32m'loc_lab'[39m,
+                  characterAsset: [32m'lu_tianxing'[39m
+                },
+                {
+                  id: [32m'right'[39m,
+                  backgroundAsset: [32m'loc_lab'[39m,
+                  dimmed: [33mtrue[39m
+                }
+              ],
+              conversation: [
+                { speaker: [32m'陆天行'[39m, text: [32m'……第42次。'[39m },
+                {
+                  speaker: [32m'陆天行'[39m,
+                  text: [32m'我按下那台老旧翻盖手机的录音键。'[39m,
+                  isNarrator: [33mtrue[39m
+                },
+                {
+                  speaker: [32m'陆天行'[39m,
+                  text: [32m'机械按键发出清脆的“咔哒”声，在这死寂的房间里被无限放大。'[39m,
+                  isNarrator: [33mtrue[39m
+                },
+                {
+                  speaker: [32m'陆天行'[39m,
+                  text: [32m'我是虚空凤凰。记录：“电话微波炉（暂定名）”第42次人体——不，活体物质转移实验。'[39m
+                },
+                { speaker: [32m'陆天行'[39m, text: [32m'结果……依然是凝胶化。'[39m },
+                {
+                  speaker: [32m'陆天行'[39m,
+                  text: [32m'手机屏幕的幽蓝色背光打在我的脸上，倒映出我布满血丝的双眼。'[39m,
+                  isNarrator: [33mtrue[39m
+                },
+                {
+                  speaker: [32m'陆天行'[39m,
+                  text: [32m'这绝对不是偶然。'[39m,
+                  effect: {
+                    type: [32m'text-shake'[39m,
+                    target: [32m'left'[39m,
+                    durationMs: [33m800[39m
+                  }
+                },
+                {
+                  speaker: [32m'陆天行'[39m,
+                  text: [32m'这是“机关”的阴谋。他们干涉了周边的微波频段，试图阻止我触及神之领域的真理……'[39m
+                },
+                { speaker: [32m'陆天行'[39m, text: [32m'嗡——'[39m, isNarrator: [33mtrue[39m },
+                {
+                  speaker: [32m'陆天行'[39m,
+                  text: [32m'破旧的主机风扇突然发出一声疲惫的哀鸣，打断了我的思绪。'[39m,
+                  isNarrator: [33mtrue[39m
+                },
+                {
+                  speaker: [32m'陆天行'[39m,
+                  text: [32m'现实的引力总是如此沉重。'[39m,
+                  isNarrator: [33mtrue[39m
+                }
+              ],
+              showFreeTextInput: [33mtrue[39m
+            }
+          }
+        },
+        {
+          toolCallId: [32m'ZOUmU6DpiAnDIm15'[39m,
+          toolName: [32m'yieldToPlayer'[39m,
+          output: {}
+        }
+      ],
+      content: [32m''[39m
+    }
+  ]
+}

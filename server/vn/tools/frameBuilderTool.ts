@@ -100,6 +100,54 @@ export const FrameInputSchema = z.object({
       description: z.string(), icon: z.string().optional(),
     })).optional(),
   }).optional(),
+  itemPresentation: z.object({
+    itemAsset: z.string().describe('Asset key for the item image'),
+    itemName: z.string(),
+    description: z.string(),
+  }).optional(),
+  cgPresentation: z.object({
+    cgAsset: z.string().describe('Asset key for the full-screen event CG'),
+    description: z.string().describe('Low-distraction text overlay for the CG'),
+    emotion: z.enum(['romantic', 'thriller', 'horror', 'happy', 'sad', 'epic', 'neutral']).default('neutral'),
+  }).optional(),
+  monologue: z.object({
+    text: z.string(),
+    speaker: z.string().optional(),
+    voiceAsset: z.string().optional(),
+  }).optional(),
+  investigationData: z.object({
+    backgroundAsset: z.string(),
+    hotspots: z.array(z.object({
+      id: z.string(),
+      label: z.string().describe('Short descriptive label for the player to click/select'),
+    })),
+  }).optional(),
+  loreEntry: z.object({
+    title: z.string(),
+    category: z.string(),
+    content: z.string(),
+  }).optional(),
+  cutIn: z.object({
+    speaker: z.string(),
+    text: z.string(),
+    style: z.enum(['shout', 'thought', 'critical']),
+    characterAsset: z.string().optional(),
+  }).optional(),
+  flashback: z.object({
+    text: z.string(),
+    filter: z.enum(['sepia', 'grayscale', 'glitch']).default('sepia'),
+    backgroundAsset: z.string().optional(),
+  }).optional(),
+  crossExamination: z.object({
+    speaker: z.string(),
+    statement: z.string(),
+    contradictionItemId: z.string().optional().describe('ID of the item that proves this statement false, if any'),
+  }).optional(),
+  timeLimit: z.object({
+    seconds: z.number(),
+    text: z.string().describe('The urgent situation description'),
+    failureConsequence: z.string().describe('What happens if the player fails to act in time'),
+  }).optional(),
   tacticalMapData: z.any().optional().describe('Tactical combat map data — use initCombatTool result directly'),
   hud: z.object({
     chapter: z.string(), scene: z.string(), showNav: z.boolean(),
@@ -216,27 +264,16 @@ function normalizeInput(input: any): any {
   };
 }
 
-function ensureRenderableFrame(frame: any): any {
-  const ensured = { ...frame };
-  if (
-    ensured.type &&
-    FRAME_REGISTRY_MAP.get(ensured.type)?.requiresNarration
-    && !ensured.dialogue?.text
-    && !ensured.narration?.text
-    && !ensured.conversation?.length
-    && !ensured.narrations?.length
-  ) {
-    ensured.narrations = [{ text: '...' }];
-  }
-  return ensured;
-}
-
 // ─── Tool export ──────────────────────────────────────────────────────────────
 
 /**
  * Validates and registers one VNFrame for display.
  * The storyteller agent calls this once per frame it wants to show.
  * Frames are collected from tool results in result.steps after the agent loop completes.
+ *
+ * Returns ok:false (error) for frames missing required content — this forces
+ * the model to retry with actual narrative text instead of silently rendering
+ * empty frames.
  */
 export const frameBuilderTool = tool({
   description: 'Build and validate one VNFrame for display to the player. Call once per frame. Frames are collected in order and shown sequentially.',
@@ -244,13 +281,36 @@ export const frameBuilderTool = tool({
   execute: async (rawInput: any) => {
     try {
       const normalized = normalizeInput(rawInput);
-      const ensured = ensureRenderableFrame(normalized);
-      const parsed = VNFrameSchema.safeParse(ensured);
+
+      // Reject frames that have no renderable content — force the model to retry
+      if (
+        normalized.type &&
+        FRAME_REGISTRY_MAP.get(normalized.type)?.requiresNarration
+        && !normalized.dialogue?.text
+        && !normalized.narration?.text
+        && !normalized.conversation?.length
+        && !normalized.narrations?.length
+      ) {
+        return {
+          ok: false as const,
+          error: `Frame "${normalized.id}" (${normalized.type}) has no content. You MUST provide conversation[] or narrations[] with actual narrative text.`,
+        };
+      }
+
+      // Reject choice frames with no choices
+      if (normalized.type === 'choice' && (!normalized.choices || normalized.choices.length === 0)) {
+        return {
+          ok: false as const,
+          error: `Choice frame "${normalized.id}" has no choices[]. You MUST provide 2-4 choice options.`,
+        };
+      }
+
+      const parsed = VNFrameSchema.safeParse(normalized);
       if (parsed.success) {
         return { ok: true as const, frame: parsed.data as VNFrame };
       }
       // If strict schema fails, still return the normalized frame — don't block rendering
-      return { ok: true as const, frame: ensured as VNFrame };
+      return { ok: true as const, frame: normalized as VNFrame };
     } catch (err: any) {
       return { ok: false as const, error: String(err) };
     }

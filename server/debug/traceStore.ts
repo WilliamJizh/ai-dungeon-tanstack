@@ -4,13 +4,6 @@ import { db, sqlite } from '../db/index.js';
 import { aiTraceSteps, aiTraces } from '../db/schema.js';
 import { safeJsonStringify } from './redact.js';
 
-// Pre-compiled prepared statement for trace step inserts (raw SQL bypasses Drizzle bug)
-const insertStepStmt = sqlite.prepare(`
-  INSERT INTO ai_trace_steps (id, trace_id, step_index, finish_reason, raw_finish_reason,
-    usage_json, request_json, response_json, tool_calls_json, tool_results_json, content_json)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-`);
-
 export function appendTraceStep(step: TraceStepInput): void {
   // AI SDK v3 may return finishReason as an object — ensure it's always a string or null
   const finishReason = step.finishReason == null ? null

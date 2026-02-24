@@ -565,4 +565,122 @@ export const PREVIEW_GROUPS: PreviewGroup[] = [
       },
     ],
   },
+
+  // ── NEW PREVIEWS ─────────────────────────────────────────────────────────────
+  {
+    label: 'ADVANCED FRAMES',
+    variants: [
+      {
+        label: 'CG Presentation',
+        frame: {
+          id: 'adv-cg', type: 'cg-presentation' as const, hud: HUD,
+          panels: [],
+          cgPresentation: {
+            cgAsset: 'bg_city',
+            description: 'The rain continued to fall, washing away the sins of the old city.',
+            emotion: 'neutral',
+          },
+        },
+      },
+      {
+        label: 'Item Found',
+        frame: {
+          id: 'adv-item', type: 'item-presentation' as const, hud: HUD,
+          panels: [],
+          itemPresentation: {
+            itemAsset: 'char_echo', // Using echo as a stand-in for an item asset
+            itemName: 'Strange Device',
+            description: 'It hums with a faint azure light. You feel it vibrating in your palm.',
+          },
+        },
+      },
+      {
+        label: 'Monologue',
+        frame: {
+          id: 'adv-mono', type: 'centered-monologue' as const, hud: HUD,
+          panels: [],
+          monologue: {
+            speaker: 'UNKNOWN',
+            text: 'I told them not to open the vault. But curiosity is a fatal flaw.',
+          },
+        },
+      },
+      {
+        label: 'Investigation',
+        frame: {
+          id: 'adv-inv', type: 'investigation' as const, hud: HUD,
+          panels: [],
+          investigationData: {
+            backgroundAsset: 'bg_hangar',
+            hotspots: [
+              { id: 'ship', label: 'Inspect the damaged hull' },
+              { id: 'console', label: 'Check the master terminal' },
+              { id: 'door', label: 'Try the sealed blast doors' },
+            ],
+          },
+        },
+      },
+      {
+        label: 'Lore Unlock',
+        frame: {
+          id: 'adv-lore', type: 'lore-unlock' as const, hud: HUD,
+          panels: [],
+          loreEntry: {
+            title: 'The First Exodus',
+            category: 'History',
+            content: 'When the core collapsed, millions fled across the stars in massive sleeper ships. Only a fraction of them arrived at this sector, their origins lost to solar storms and time.',
+          },
+        },
+      },
+      {
+        label: 'Dynamic Cut-In',
+        frame: {
+          id: 'adv-cut', type: 'dynamic-cut-in' as const, hud: HUD,
+          panels: [],
+          cutIn: {
+            speaker: 'JAX',
+            text: 'We have to move NOW!',
+            style: 'critical',
+            characterAsset: 'char_jax',
+          },
+        },
+      },
+      {
+        label: 'Flashback',
+        frame: {
+          id: 'adv-flash', type: 'flashback' as const, hud: HUD,
+          panels: [],
+          flashback: {
+            text: 'It was a Tuesday when the world changed...',
+            filter: 'sepia',
+            backgroundAsset: 'bg_city',
+          },
+        },
+      },
+      {
+        label: 'Cross-Examination',
+        frame: {
+          id: 'adv-cross', type: 'cross-examination' as const, hud: HUD,
+          panels: [],
+          crossExamination: {
+            speaker: 'SUSPECT',
+            statement: 'I was simply walking my dog down by the harbor. I didn\'t see any ships arriving!',
+            contradictionItemId: 'harbor_manifest',
+          },
+        },
+      },
+      {
+        label: 'Time Limit',
+        frame: {
+          id: 'adv-time', type: 'time-limit' as const, hud: HUD,
+          panels: [],
+          timeLimit: {
+            seconds: 10,
+            text: 'The airlock is venting atmosphere! Override the controls immediately!',
+            failureConsequence: 'You were blown out into the vacuum of space.',
+          },
+        },
+      },
+    ]
+  }
 ];

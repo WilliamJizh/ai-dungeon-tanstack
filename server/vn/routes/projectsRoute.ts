@@ -17,13 +17,14 @@ interface ProjectSummary {
 }
 
 function toSummary(pkg: VNPackage): ProjectSummary {
+  const totalScenes = (pkg.meta as any).totalScenes ?? (pkg.meta as any).totalNodes ?? 0;
   return {
     id: pkg.id,
     title: pkg.title,
     genre: pkg.genre,
     artStyle: pkg.artStyle,
     createdAt: pkg.createdAt,
-    totalScenes: pkg.meta.totalScenes,
+    totalScenes,
     estimatedDuration: pkg.meta.estimatedDuration,
     generationMs: pkg.meta.generationMs,
   };

@@ -1,7 +1,13 @@
 import { z } from 'zod';
 
 /** The layout type of a VN frame, determines which React component renders it. */
-export const FrameTypeSchema = z.enum(['full-screen', 'dialogue', 'three-panel', 'choice', 'battle', 'transition', 'skill-check', 'dice-roll', 'inventory', 'map', 'character-sheet', 'tactical-map']);
+export const FrameTypeSchema = z.enum([
+  'full-screen', 'dialogue', 'three-panel', 'choice', 'battle', 'transition',
+  'skill-check', 'dice-roll', 'inventory', 'map', 'character-sheet', 'tactical-map',
+  // New Presentation Frames
+  'item-presentation', 'cg-presentation', 'centered-monologue', 'investigation',
+  'lore-unlock', 'dynamic-cut-in', 'flashback', 'cross-examination', 'time-limit'
+]);
 export type FrameType = z.infer<typeof FrameTypeSchema>;
 
 /** Visual effects applied to a frame or panel. Auto-cleared after durationMs. */
@@ -261,6 +267,63 @@ export const VNFrameSchema = z.object({
       playerAttackRange: z.number().default(1),
       showGrid: z.boolean().default(true),
     }).default({ playerMoveRange: 4, playerAttackRange: 1, showGrid: true }),
+  }).optional(),
+  /** Item Presentation — for type='item-presentation'. */
+  itemPresentation: z.object({
+    itemAsset: z.string().describe('Asset key for the item image'),
+    itemName: z.string(),
+    description: z.string(),
+  }).optional(),
+  /** Event CG Presentation — for type='cg-presentation'. */
+  cgPresentation: z.object({
+    cgAsset: z.string().describe('Asset key for the full-screen event CG'),
+    description: z.string().describe('Low-distraction text overlay for the CG'),
+    emotion: z.enum(['romantic', 'thriller', 'horror', 'happy', 'sad', 'epic', 'neutral']).default('neutral'),
+  }).optional(),
+  /** Centered Monologue — for type='centered-monologue'. */
+  monologue: z.object({
+    text: z.string(),
+    speaker: z.string().optional(),
+    voiceAsset: z.string().optional(),
+  }).optional(),
+  /** Investigation Scene — for type='investigation'. */
+  investigationData: z.object({
+    backgroundAsset: z.string(),
+    hotspots: z.array(z.object({
+      id: z.string(),
+      label: z.string().describe('Short descriptive label for the player to click/select'),
+    })),
+  }).optional(),
+  /** Lore Unlock — for type='lore-unlock'. */
+  loreEntry: z.object({
+    title: z.string(),
+    category: z.string(),
+    content: z.string(),
+  }).optional(),
+  /** Dynamic Cut-In — for type='dynamic-cut-in'. */
+  cutIn: z.object({
+    speaker: z.string(),
+    text: z.string(),
+    style: z.enum(['shout', 'thought', 'critical']),
+    characterAsset: z.string().optional(),
+  }).optional(),
+  /** Flashback — for type='flashback'. */
+  flashback: z.object({
+    text: z.string(),
+    filter: z.enum(['sepia', 'grayscale', 'glitch']).default('sepia'),
+    backgroundAsset: z.string().optional(),
+  }).optional(),
+  /** Cross Examination — for type='cross-examination'. */
+  crossExamination: z.object({
+    speaker: z.string(),
+    statement: z.string(),
+    contradictionItemId: z.string().optional().describe('ID of the item that proves this statement false, if any'),
+  }).optional(),
+  /** Time Limit — for type='time-limit'. */
+  timeLimit: z.object({
+    seconds: z.number(),
+    text: z.string().describe('The urgent situation description'),
+    failureConsequence: z.string().describe('What happens if the player fails to act in time'),
   }).optional(),
   /**
    * Internal metadata used by agents to track narrative position.

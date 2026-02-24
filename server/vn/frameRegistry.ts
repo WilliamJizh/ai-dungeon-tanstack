@@ -131,6 +131,51 @@ export const FRAME_REGISTRY: FrameRegistryEntry[] = [
     agentWorkflow: TACTICAL_WORKFLOW,
     dataField: 'tacticalMapData',
   },
+  {
+    type: 'item-presentation',
+    agentSummary: `Showcase a newly acquired object art prominently. Set itemPresentation: { itemAsset, itemName, description }.`,
+    dataField: 'itemPresentation',
+  },
+  {
+    type: 'cg-presentation',
+    agentSummary: `Full-screen event artwork (CG) with low-distraction text overlay. Set cgPresentation: { cgAsset, description, emotion }.`,
+    dataField: 'cgPresentation',
+  },
+  {
+    type: 'centered-monologue',
+    agentSummary: `Text on a black/ambient screen for deep thought, disembodied voice-over, or prologues. Set monologue: { text, speaker?, voiceAsset? }.`,
+    dataField: 'monologue',
+  },
+  {
+    type: 'investigation',
+    agentSummary: `Point-and-click scene investigation. Set investigationData: { backgroundAsset, hotspots[] }. Player will select from the hotspots.`,
+    dataField: 'investigationData',
+  },
+  {
+    type: 'lore-unlock',
+    agentSummary: `Unlock a database/encyclopedia entry for the player without info-dumping in dialogue. Set loreEntry: { title, category, content }.`,
+    dataField: 'loreEntry',
+  },
+  {
+    type: 'dynamic-cut-in',
+    agentSummary: `Comic-book style character interruptions or shouts. Set cutIn: { speaker, text, style, characterAsset? }.`,
+    dataField: 'cutIn',
+  },
+  {
+    type: 'flashback',
+    agentSummary: `Explicitly filtered frame (e.g. sepia/grayscale) to denote memories, dreams, or premonitions. Set flashback: { text, filter, backgroundAsset? }.`,
+    dataField: 'flashback',
+  },
+  {
+    type: 'cross-examination',
+    agentSummary: `Logic puzzle presenting a statement the player must contradict with an item. Set crossExamination: { speaker, statement, contradictionItemId? }.`,
+    dataField: 'crossExamination',
+  },
+  {
+    type: 'time-limit',
+    agentSummary: `High tension deadline enforcing a quick decision/action (Quick Time Event). Set timeLimit: { seconds, text, failureConsequence }.`,
+    dataField: 'timeLimit',
+  },
 ];
 
 /** O(1) lookup — use in hot paths (frameBuilderTool, prompt builder). */
