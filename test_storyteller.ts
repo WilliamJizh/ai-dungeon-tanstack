@@ -116,6 +116,7 @@ async function run() {
     let messages: any[] = [];
     let turnNumber = 0;
     let consecutiveSuccesses = 0;
+    let endingTurnCountdown: number | null = null;
 
     if (isResuming && existingSession) {
         const flags = JSON.parse(existingSession.flagsJson || '{}');
@@ -611,6 +612,33 @@ async function run() {
             }
 
             if (!keepPlaying) break;
+
+            // End-game detection: if the final act's progression threshold is met,
+            // allow 2 more turns for ending narration then stop.
+            if (AUTO_MODE) {
+                const postState = db.select({
+                    currentActId: plotStates.currentActId,
+                    globalProgression: plotStates.globalProgression,
+                }).from(plotStates).where(eq(plotStates.sessionId, sessionId)).get();
+                if (postState) {
+                    const acts = vnPackage.plot.acts;
+                    const isFinalAct = acts[acts.length - 1]?.id === postState.currentActId;
+                    const finalRequired = acts[acts.length - 1]?.globalProgression?.requiredValue ?? Infinity;
+                    if (isFinalAct && (postState.globalProgression ?? 0) >= finalRequired) {
+                        if (!endingTurnCountdown) {
+                            endingTurnCountdown = 3; // Allow 3 more turns for ending narration
+                            console.log(`\n[AUTO] FINAL ACT COMPLETE — ${endingTurnCountdown} turns remaining for ending`);
+                            log(`\n**FINAL ACT PROGRESSION MET** — narrating ending...\n`);
+                        }
+                        endingTurnCountdown--;
+                        if (endingTurnCountdown <= 0) {
+                            console.log(`\n[AUTO] Ending narration complete. Stopping.`);
+                            log(`\n**ENDING NARRATION COMPLETE**\n`);
+                            keepPlaying = false;
+                        }
+                    }
+                }
+            }
 
             // Prompt for player input
             if (AUTO_MODE) {
