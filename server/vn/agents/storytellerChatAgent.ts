@@ -366,11 +366,9 @@ function storytellerPrepareStep({ stepNumber, steps }: { stepNumber: number; ste
     return { toolChoice: { type: 'tool' as const, toolName: 'frameBuilderTool' as const } };
   }
 
-  // Step 1: Force frame generation immediately after plotStateTool.
-  // Deterministic first frame step reduces Gemini hang probability in 'required' mode.
-  if (stepNumber === 1) {
-    return { toolChoice: { type: 'tool' as const, toolName: 'frameBuilderTool' as const } };
-  }
+  // Step 1: After plotStateTool, let the model freely choose its next action.
+  // It may call frameBuilderTool (normal scene) or requestTravelTool (player wants to move).
+  // Previously forced frameBuilderTool here, but that prevented travel and caused scene loops.
 
   // Step 2+: If model is stuck calling only plotStateTool, force frame production.
   const allPlotState = prevToolCalls.every((tc: any) => tc.toolName === 'plotStateTool');

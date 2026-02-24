@@ -31,6 +31,11 @@ const AUTO_ACTIONS = [
 ];
 let autoActionIdx = 0;
 
+// Loop detection state — track recent choice sets to detect scene repetition
+const recentChoiceSets: string[] = [];  // last N serialized choice arrays
+const LOOP_DETECTION_WINDOW = 3;        // detect after 3 identical choice sets
+let consecutiveLoopBreaks = 0;          // escalate loop-breaking strategy
+
 function log(text: string) {
     if (AUTO_MODE) {
         appendFileSync(LOG_FILE, text + '\n');
@@ -438,12 +443,18 @@ async function run() {
 
                     // Consume fullStream with timeout protection — if stream stalls
                     // mid-turn (Gemini hang), we gracefully continue with partial results.
+                    const MAX_FRAMES_PER_TURN = 8;  // Safety valve: prevent runaway frame loops
                     try {
                         for await (const event of result.fullStream) {
                             if (event.type === 'tool-result') {
                                 const toolOutput = event.output as any;
                                 if (event.toolName === 'frameBuilderTool' && toolOutput?.ok) {
                                     totalFrames++;
+                                    if (totalFrames >= MAX_FRAMES_PER_TURN) {
+                                        console.log(`\n[Safety] Max frames per turn (${MAX_FRAMES_PER_TURN}) reached — truncating`);
+                                        if (AUTO_MODE) log(`**Safety cutoff**: ${MAX_FRAMES_PER_TURN} frames reached\n`);
+                                        break;
+                                    }
                                 }
                                 renderToolResult(event.toolName, (event as any).input, event.output);
                             }
@@ -588,14 +599,70 @@ async function run() {
 
             // Prompt for player input
             if (AUTO_MODE) {
-                // Auto-play: pick a choice or generate a free action
+                // Auto-play: pick a choice or generate a free action (with loop detection)
                 let chosenText: string;
                 if (options.length > 0) {
-                    // Pick a random choice, weighted toward earlier (main path) options
-                    const idx = Math.random() < 0.6 ? 0 : Math.floor(Math.random() * options.length);
-                    chosenText = `Player chooses: ${options[idx].text}`;
-                    console.log(`\n[AUTO] Chose option ${idx + 1}: ${options[idx].text}`);
-                    log(`**Player Choice**: Option ${idx + 1} — ${options[idx].text}\n`);
+                    // ── Loop detection ──────────────────────────────────────────
+                    const choiceKey = options.map((o: any) => o.text).sort().join('|');
+                    recentChoiceSets.push(choiceKey);
+                    if (recentChoiceSets.length > LOOP_DETECTION_WINDOW + 2) recentChoiceSets.shift();
+
+                    const lastN = recentChoiceSets.slice(-LOOP_DETECTION_WINDOW);
+                    const isLoop = lastN.length >= LOOP_DETECTION_WINDOW && lastN.every(k => k === lastN[0]);
+
+                    if (isLoop) {
+                        consecutiveLoopBreaks++;
+                        console.log(`\n[AUTO] ⚠️  LOOP DETECTED (${consecutiveLoopBreaks}x) — breaking with alternative action`);
+                        log(`**⚠️ LOOP DETECTED** (${consecutiveLoopBreaks}x) — injecting break action\n`);
+
+                        // Escalating loop-break strategy
+                        if (consecutiveLoopBreaks <= 2) {
+                            // Strategy 1: Pick a DIFFERENT choice option (last one instead of first)
+                            const idx = options.length - 1;
+                            chosenText = `Player chooses: ${options[idx].text}`;
+                            console.log(`[AUTO] Picking alt option ${idx + 1}: ${options[idx].text}`);
+                            log(`**Player Choice (loop-break)**: Option ${idx + 1} — ${options[idx].text}\n`);
+                        } else if (consecutiveLoopBreaks <= 4) {
+                            // Strategy 2: Force travel to a different location
+                            const dbRow = db.select().from(plotStates).where(eq(plotStates.sessionId, sessionId)).get();
+                            const currentLoc = dbRow?.currentLocationId || '';
+                            // Get connections from the VN package
+                            const currentAct = vnPackage.plot.acts.find(a => a.id === dbRow?.currentActId);
+                            const loc = currentAct?.sandboxLocations?.find(l => l.id === currentLoc);
+                            const connections = loc?.connections || [];
+                            if (connections.length > 0) {
+                                const target = connections[Math.floor(Math.random() * connections.length)];
+                                chosenText = `Player: I want to go to ${target}. Let's leave this place.`;
+                                console.log(`[AUTO] Forcing travel to: ${target}`);
+                                log(`**Player Action (forced travel)**: Go to ${target}\n`);
+                            } else {
+                                chosenText = `Player: I want to explore somewhere new. Let's leave this area and find another path.`;
+                                log(`**Player Action (forced explore)**: Leave current area\n`);
+                            }
+                        } else {
+                            // Strategy 3: Free-form action to break any pattern
+                            const breakActions = [
+                                'I examine myself and check my inventory',
+                                'I shout loudly to get attention',
+                                'I sit down and refuse to move until something changes',
+                                'I retrace my steps and go back the way I came',
+                                'Something feels wrong. I need to find a completely different approach.',
+                            ];
+                            const action = breakActions[consecutiveLoopBreaks % breakActions.length];
+                            chosenText = `Player: ${action}`;
+                            console.log(`[AUTO] Extreme loop-break: ${action}`);
+                            log(`**Player Action (extreme loop-break)**: ${action}\n`);
+                        }
+                        // Clear detection window after breaking
+                        recentChoiceSets.length = 0;
+                    } else {
+                        consecutiveLoopBreaks = 0;
+                        // Normal choice: weighted toward earlier (main path) options
+                        const idx = Math.random() < 0.6 ? 0 : Math.floor(Math.random() * options.length);
+                        chosenText = `Player chooses: ${options[idx].text}`;
+                        console.log(`\n[AUTO] Chose option ${idx + 1}: ${options[idx].text}`);
+                        log(`**Player Choice**: Option ${idx + 1} — ${options[idx].text}\n`);
+                    }
                 } else {
                     // Use a rotating action from the pool
                     const action = AUTO_ACTIONS[autoActionIdx % AUTO_ACTIONS.length];

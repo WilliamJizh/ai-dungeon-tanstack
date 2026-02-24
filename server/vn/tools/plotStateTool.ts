@@ -334,7 +334,6 @@ export const plotStateTool = tool({
           }
 
           // ── Auto-advance act when progression threshold is met ────────────
-          const requiredProg = act.globalProgression?.requiredValue ?? Infinity;
           if (state.globalProgression >= requiredProg) {
             const actIdx = pkg.plot.acts.findIndex(a => a.id === act.id);
             const nextAct = actIdx >= 0 && actIdx + 1 < pkg.plot.acts.length
