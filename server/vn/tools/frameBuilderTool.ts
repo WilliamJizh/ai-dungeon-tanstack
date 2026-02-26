@@ -22,12 +22,12 @@ export const FrameInputSchema = z.object({
     isNarrator: z.boolean().optional(),
     position: z.enum(['bubble', 'bottom']).optional(),
   }).optional().describe('Single character dialogue. @deprecated Use conversation[] instead.'),
-  conversation: z.array(z.object({
-    speaker: z.string(),
-    text: z.string(),
-    isNarrator: z.boolean().optional(),
-    effect: VNEffectSchema.optional(),
-  })).optional().describe('Ordered conversation lines with optional per-line effects. Panels set participants, renderer auto-shifts focus between speakers.'),
+  conversation: z.array(z.union([
+    z.object({ speaker: z.string(), text: z.string(), effect: VNEffectSchema.optional() }),
+    z.object({ narrator: z.string(), effect: VNEffectSchema.optional() }),
+    // Legacy backward compat: accept {speaker, text, isNarrator:true} — normalized away below
+    z.object({ speaker: z.string(), text: z.string(), isNarrator: z.boolean().optional(), effect: VNEffectSchema.optional() }),
+  ])).optional().describe('Conversation lines. Two shapes: {speaker,text} for spoken dialogue, {narrator:"..."} for actions/thoughts/stage direction.'),
   narration: z.object({
     text: z.string(),
     panelId: z.string().optional(),
@@ -243,8 +243,39 @@ function normalizeInput(input: any): any {
   // Normalize old → new: single dialogue → conversation[]
   let conversation = raw.conversation;
   if (!conversation && dialogue) {
-    conversation = [{ speaker: dialogue.speaker, text: dialogue.text, isNarrator: dialogue.isNarrator }];
+    conversation = [
+      dialogue.isNarrator
+        ? { narrator: dialogue.text }
+        : { speaker: dialogue.speaker, text: dialogue.text },
+    ];
     dialogue = undefined;
+  }
+
+  // Normalize legacy isNarrator entries → {narrator} shape
+  if (Array.isArray(conversation)) {
+    conversation = conversation.map((line: any) => {
+      if (line.isNarrator && line.text) {
+        const result: any = { narrator: line.text };
+        if (line.effect) result.effect = line.effect;
+        return result;
+      }
+      if ('isNarrator' in line) {
+        const { isNarrator, ...rest } = line;
+        return rest;
+      }
+      return line;
+    });
+  }
+
+  // Soft warning: detect fake stat modifiers in conversation text
+  if (Array.isArray(conversation)) {
+    const STAT_PATTERN = /[\u4e00-\u9fff]+[+\-]\d|[A-Z][a-z]+\s*[+\-]\d/;
+    for (const line of conversation) {
+      const text = 'narrator' in line ? (line as any).narrator : (line as any).text;
+      if (text && STAT_PATTERN.test(text)) {
+        console.warn(`[frameBuilderTool] Fake stat modifier in text: "${text.substring(0, 80)}…" — use dice-roll frames instead`);
+      }
+    }
   }
 
   // Normalize old → new: single narration → narrations[]

@@ -106,7 +106,7 @@ A `VNFrame` is a single screen state in the visual novel. The React renderer sel
 | `type` | FrameType | Yes | Layout type enum |
 | `hud` | object | No | `{ chapter, scene, showNav }` — top bar overlay |
 | `panels` | VNPanel[] | Yes | Visual panels (can be empty for transitions) |
-| `dialogue` | object | No | `{ speaker, text, targetPanel, isNarrator?, position? }` |
+| `dialogue` | object | No | `{ speaker, text, targetPanel, position? }` (legacy) |
 | `narration` | object | No | `{ text, panelId? }` — no speaker attribution |
 | `choices` | Choice[] | No | `{ id, text, hint? }` array |
 | `showFreeTextInput` | boolean | No | Show free-text input below choices |

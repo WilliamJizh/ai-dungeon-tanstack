@@ -18,16 +18,24 @@ const AUTO_MODE = cliArgs.includes('--auto');
 const MAX_AUTO_TURNS = parseInt(cliArgs.find(a => a.startsWith('--max-turns='))?.split('=')[1] || '200');
 const LOG_FILE = `playtest_log_${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.md`;
 
-// Auto-play action pool — varied actions to simulate real player behavior
+// Auto-play action pool — proactive, plot-advancing actions that trigger encounters & skill checks
 const AUTO_ACTIONS = [
-    'Look around carefully and investigate the surroundings',
-    'Talk to the nearest person',
-    'Move forward and explore deeper',
-    'Examine the most interesting object nearby',
-    'Ask about what just happened',
-    'Try to find a clue or hint',
-    'Follow the sound or movement',
-    'Check for any hidden paths or secrets',
+    'I examine the most important object here and try to figure out what it does',
+    'I talk to the person here and ask them directly about the situation',
+    'I decide to take action on what I just learned — what can I do next?',
+    'I search this place thoroughly for anything I might have missed',
+    'I want to go somewhere new — where can I travel from here?',
+    'I confront the biggest problem or mystery in front of me',
+    'I try to use what I found to make progress on the main objective',
+    'I ask for help — is there anyone who knows more about this?',
+    'I commit to solving the puzzle or challenge here before moving on',
+    'Something feels off — I investigate the anomaly more closely',
+    // Risky actions that should trigger dice rolls:
+    'I attempt to repair or hack the device in front of me',
+    'I try to sneak past the danger without being noticed',
+    'I try to persuade the other person to help me, even if they seem reluctant',
+    'I physically push through the obstacle blocking my path',
+    'I try to decode or decipher the hidden message or signal',
 ];
 let autoActionIdx = 0;
 
@@ -116,7 +124,10 @@ async function run() {
     let messages: any[] = [];
     let turnNumber = 0;
     let consecutiveSuccesses = 0;
+    let consecutiveErrors = 0;
+    const MAX_CONSECUTIVE_ERRORS = 5;
     let endingTurnCountdown: number | null = null;
+    let turnsSinceLastDiceRoll = 0; // Track dice-roll usage for hint injection
 
     if (isResuming && existingSession) {
         const flags = JSON.parse(existingSession.flagsJson || '{}');
@@ -159,6 +170,7 @@ async function run() {
 
     while (keepPlaying) {
         turnNumber++;
+        turnsSinceLastDiceRoll++;
         if (AUTO_MODE && turnNumber > MAX_AUTO_TURNS) {
             console.log(`\n[AUTO-PLAY] Max turns (${MAX_AUTO_TURNS}) reached. Stopping.`);
             log(`\n---\n\n## Auto-play stopped at turn ${turnNumber} (max turns reached)\n`);
@@ -218,7 +230,7 @@ async function run() {
                         const conversation = frame.conversation ?? toolInput?.conversation ?? [];
                         const choices = frame.choices ?? toolInput?.choices ?? [];
                         const narText = narrations.map((n: any) => n.text).join(' ');
-                        const convText = conversation.map((c: any) => c.isNarrator ? `*${c.text}*` : `**${c.speaker}**: "${c.text}"`).join('\n  - ');
+                        const convText = conversation.map((c: any) => 'narrator' in c ? `*${c.narrator}*` : `**${c.speaker}**: "${c.text}"`).join('\n  - ');
                         const choiceText = choices.map((c: any, i: number) => `  ${i + 1}. ${c.text}`).join('\n');
 
                         log(`**Frame ${frameNum}** (${type})`);
@@ -256,8 +268,8 @@ async function run() {
                     if (Array.isArray(conversation) && conversation.length > 0) {
                         conversation.forEach((line: any) => {
                             const eff = line.effect ? ` [${line.effect.type}]` : '';
-                            if (line.isNarrator) {
-                                console.log(`   📝 ${line.text}${eff}`);
+                            if ('narrator' in line) {
+                                console.log(`   📝 ${line.narrator}${eff}`);
                             } else {
                                 console.log(`   🗣️  ${line.speaker}: "${line.text}"${eff}`);
                             }
@@ -412,14 +424,83 @@ async function run() {
                     lastInvestigationHotspots = [];
 
                     let result: any;
-                    let streamTimedOut = false;
+                    const MAX_FRAMES_PER_TURN = 20;
+
+                    // Pre-fetch plotState via agent's bound tool (includes cache + Director invocation).
+                    // DeepSeek V3.2 ignores toolChoice, so we call it externally to guarantee
+                    // the Director is consulted every turn. The cache prevents double calls if
+                    // the model also calls plotStateTool on its own.
+                    let plotStateResult: any = null;
+                    try {
+                        const lastUserMsg = compressedMessages.filter((m: any) => m.role === 'user').pop();
+                        const playerQuery = typeof lastUserMsg?.content === 'string'
+                            ? lastUserMsg.content
+                            : (lastUserMsg?.content ?? []).map((c: any) => c.text || '').join(' ');
+                        if (typeof (agent as any).preFetchPlotState === 'function') {
+                            plotStateResult = await (agent as any).preFetchPlotState(playerQuery);
+                        }
+                    } catch (psErr: any) {
+                        console.log(`[plotStateTool pre-call] Error: ${psErr?.message?.slice(0, 200)}`);
+                    }
+
+                    // Inject plotState result into the last user message so the model has Director guidance.
+                    // We embed it as a [DIRECTOR_CONTEXT] prefix — simpler than synthetic tool messages
+                    // which fail AI SDK validation on the first turn.
+                    let messagesWithPlotState = compressedMessages;
+                    if (plotStateResult) {
+                        const lastIdx = compressedMessages.length - 1;
+                        const lastMsg = compressedMessages[lastIdx];
+                        const lastContent = typeof lastMsg.content === 'string'
+                            ? lastMsg.content
+                            : (lastMsg.content || []).map((c: any) => c.text || '').join(' ');
+                        const briefJson = JSON.stringify(plotStateResult);
+                        const diceHint = turnsSinceLastDiceRoll >= 3
+                            ? `\n[SYSTEM REMINDER: ${turnsSinceLastDiceRoll} turns since last dice-roll. You MUST use a dice-roll frame this turn for any uncertain action. Emit frameBuilderTool with type:"dice-roll" and diceRoll:{diceNotation:"2d6", description:"2d6 + [Stat] (+N)"}. The loop stops automatically on dice-roll.]\n`
+                            : '';
+                        const enrichedText = `[DIRECTOR_CONTEXT — treat as plotStateTool result]\n${briefJson}${diceHint}\n\n[PLAYER_INPUT]\n${lastContent}`;
+                        messagesWithPlotState = [
+                            ...compressedMessages.slice(0, lastIdx),
+                            { role: 'user' as const, content: [{ type: 'text' as const, text: enrichedText }] },
+                        ];
+                    }
+
                     for (let attempt = 0; attempt < 3; attempt++) {
                         try {
                             result = await agent.stream({
-                                messages: compressedMessages,
-                                onStepFinish: traceOnStepFinish,
+                                messages: messagesWithPlotState,
+                                onStepFinish: (stepResult: any) => {
+                                    // Trace callback
+                                    traceOnStepFinish(stepResult);
+
+                                    // Debug: inspect step structure
+                                    const trCount = stepResult.toolResults?.length ?? 0;
+                                    const tcCount = stepResult.toolCalls?.length ?? 0;
+                                    const contentTypes = (stepResult.content ?? []).map((p: any) => p.type).join(',');
+                                    console.log(`[onStepFinish] step=${stepResult.stepNumber} reason=${stepResult.finishReason} toolCalls=${tcCount} toolResults=${trCount} content=[${contentTypes}]`);
+                                    // Show tool errors
+                                    for (const part of stepResult.content ?? []) {
+                                        if (part.type === 'tool-error') {
+                                            console.log(`  [TOOL-ERROR] ${part.toolName}: ${String(part.error?.message ?? part.error).slice(0, 200)}`);
+                                        }
+                                    }
+                                },
                                 timeout: 120_000,
                             });
+
+                            for await (const event of result.fullStream) {
+                                if (event.type === 'tool-result') {
+                                    if (event.toolName === 'frameBuilderTool') {
+                                        totalFrames++;
+                                        if (totalFrames > MAX_FRAMES_PER_TURN) {
+                                            console.log(`\n[Safety] Max frames per turn (${MAX_FRAMES_PER_TURN}) reached`);
+                                            if (AUTO_MODE) log(`**Safety cutoff**: ${MAX_FRAMES_PER_TURN} frames reached\n`);
+                                            continue;
+                                        }
+                                    }
+                                    renderToolResult(event.toolName, (event as any).input ?? (event as any).args, event.output);
+                                }
+                            }
+
                             break;
                         } catch (retryErr: any) {
                             if (isQuotaOrRateLimitError(retryErr)) {
@@ -443,40 +524,8 @@ async function run() {
                         }
                     }
 
-                    // Consume fullStream with timeout protection — if stream stalls
-                    // mid-turn (Gemini hang), we gracefully continue with partial results.
-                    const MAX_FRAMES_PER_TURN = 8;  // Safety valve: prevent runaway frame loops
-                    try {
-                        for await (const event of result.fullStream) {
-                            if (event.type === 'tool-result') {
-                                const toolOutput = event.output as any;
-                                if (event.toolName === 'frameBuilderTool') {
-                                    totalFrames++;
-                                    if (totalFrames >= MAX_FRAMES_PER_TURN) {
-                                        console.log(`\n[Safety] Max frames per turn (${MAX_FRAMES_PER_TURN}) reached — truncating`);
-                                        if (AUTO_MODE) log(`**Safety cutoff**: ${MAX_FRAMES_PER_TURN} frames reached\n`);
-                                        break;
-                                    }
-                                }
-                                renderToolResult(event.toolName, (event as any).input, event.output);
-                            }
-                        }
-                    } catch (streamErr: any) {
-                        const errMsg = String(streamErr?.message ?? '');
-                        const isTimeout = streamErr?.name === 'TimeoutError'
-                            || errMsg.includes('timeout')
-                            || errMsg.includes('aborted');
-                        if (isTimeout) {
-                            console.log(`\n[Stream stalled after ${totalFrames} frames — treating as partial turn]`);
-                            if (AUTO_MODE) log(`**Stream timeout** after ${totalFrames} frames\n`);
-                            streamTimedOut = true;
-                        } else {
-                            throw streamErr;
-                        }
-                    }
-
-                    // Only consume text/response if stream completed normally
-                    if (!streamTimedOut) {
+                    // Extract response messages for history
+                    if (result) {
                         const text = await result.text;
                         if (text && text.trim()) {
                             console.log(`\n💬 [DM Text]:\n${text}`);
@@ -484,48 +533,15 @@ async function run() {
 
                         const resp = await result.response;
                         const appendRaw = resp.messages as any[];
-                        const combined = [...messages, ...appendRaw];
-                        messages = sanitizeHistory(combined);
-                    } else {
-                        // Try to salvage partial response for history continuity
-                        try {
-                            const resp = await Promise.race([
-                                result.response,
-                                new Promise((_, reject) => setTimeout(() => reject(new Error('response timeout')), 5_000)),
-                            ]) as any;
-                            const appendRaw = resp.messages as any[];
-                            if (appendRaw?.length > 0) {
-                                messages = sanitizeHistory([...messages, ...appendRaw]);
-                                console.log(`[Salvaged ${appendRaw.length} messages from partial response]`);
-                            }
-                        } catch {
-                            // Response not available — messages stay as-is
-                        }
+                        messages = sanitizeHistory([...messages, ...appendRaw]);
                     }
 
-                    if (streamTimedOut) {
-                        if (totalFrames > 0) {
-                            // Got frames before timeout — accept partial turn
-                            console.log(`[Continuing with ${totalFrames} frames from partial response]`);
-                            diceLoop = false;
-                        } else {
-                            // No frames — downgrade model and retry
-                            const newModel = downgradeModel('storyteller');
-                            if (newModel) {
-                                console.log(`\n[Retrying with ${newModel}...]`);
-                                agent = createStorytellerAgent(vnPackage, sessionId);
-                                continue;
-                            } else {
-                                console.log(`\n[All model fallbacks exhausted]`);
-                                keepPlaying = false;
-                                diceLoop = false;
-                            }
-                        }
-                    } else if (gameComplete) {
+                    if (gameComplete) {
                         keepPlaying = false;
                         diceLoop = false;
                         if (AUTO_MODE) log(`\n---\n\n## GAME COMPLETE at Turn ${turnNumber}\n`);
                     } else if (lastFrameType === 'dice-roll') {
+                        turnsSinceLastDiceRoll = 0; // Reset dice-roll tracker
                         // Dice roll frame — player presses Enter, we compute the result
                         if (!AUTO_MODE) {
                             try { await rl!.question('\n🎲 [Press Enter to roll...]'); }
@@ -578,6 +594,7 @@ async function run() {
             }
 
             finishTrace('success');
+            consecutiveErrors = 0;
 
             // Model recovery: after 3 consecutive successful turns on a downgraded model,
             // try resetting to the best model to get richer narrative quality.
@@ -642,10 +659,11 @@ async function run() {
 
             // Prompt for player input
             if (AUTO_MODE) {
-                // Auto-play: pick a choice or generate a free action (with loop detection)
+                // Auto-play: only interact when the story prompts for it
                 let chosenText: string;
+
                 if (options.length > 0) {
-                    // ── Loop detection ──────────────────────────────────────────
+                    // ── Choice frame presented — pick an option ──────────────
                     const choiceKey = options.map((o: any) => o.text).sort().join('|');
                     recentChoiceSets.push(choiceKey);
                     if (recentChoiceSets.length > LOOP_DETECTION_WINDOW + 2) recentChoiceSets.shift();
@@ -655,64 +673,44 @@ async function run() {
 
                     if (isLoop) {
                         consecutiveLoopBreaks++;
-                        console.log(`\n[AUTO] ⚠️  LOOP DETECTED (${consecutiveLoopBreaks}x) — breaking with alternative action`);
-                        log(`**⚠️ LOOP DETECTED** (${consecutiveLoopBreaks}x) — injecting break action\n`);
+                        console.log(`\n[AUTO] ⚠️  LOOP DETECTED (${consecutiveLoopBreaks}x) — breaking`);
+                        log(`**⚠️ LOOP DETECTED** (${consecutiveLoopBreaks}x)\n`);
 
-                        // Escalating loop-break strategy
                         if (consecutiveLoopBreaks <= 2) {
-                            // Strategy 1: Pick a DIFFERENT choice option (last one instead of first)
                             const idx = options.length - 1;
                             chosenText = `Player chooses: ${options[idx].text}`;
-                            console.log(`[AUTO] Picking alt option ${idx + 1}: ${options[idx].text}`);
                             log(`**Player Choice (loop-break)**: Option ${idx + 1} — ${options[idx].text}\n`);
-                        } else if (consecutiveLoopBreaks <= 4) {
-                            // Strategy 2: Force travel to a different location
+                        } else {
+                            // Force travel to escape loop
                             const dbRow = db.select().from(plotStates).where(eq(plotStates.sessionId, sessionId)).get();
-                            const currentLoc = dbRow?.currentLocationId || '';
-                            // Get connections from the VN package
                             const currentAct = vnPackage.plot.acts.find(a => a.id === dbRow?.currentActId);
-                            const loc = currentAct?.sandboxLocations?.find(l => l.id === currentLoc);
+                            const loc = currentAct?.sandboxLocations?.find(l => l.id === dbRow?.currentLocationId);
                             const connections = loc?.connections || [];
                             if (connections.length > 0) {
                                 const target = connections[Math.floor(Math.random() * connections.length)];
                                 chosenText = `Player: I want to go to ${target}. Let's leave this place.`;
-                                console.log(`[AUTO] Forcing travel to: ${target}`);
                                 log(`**Player Action (forced travel)**: Go to ${target}\n`);
                             } else {
-                                chosenText = `Player: I want to explore somewhere new. Let's leave this area and find another path.`;
+                                chosenText = `Player: I need to find a completely different approach.`;
                                 log(`**Player Action (forced explore)**: Leave current area\n`);
                             }
-                        } else {
-                            // Strategy 3: Free-form action to break any pattern
-                            const breakActions = [
-                                'I examine myself and check my inventory',
-                                'I shout loudly to get attention',
-                                'I sit down and refuse to move until something changes',
-                                'I retrace my steps and go back the way I came',
-                                'Something feels wrong. I need to find a completely different approach.',
-                            ];
-                            const action = breakActions[consecutiveLoopBreaks % breakActions.length];
-                            chosenText = `Player: ${action}`;
-                            console.log(`[AUTO] Extreme loop-break: ${action}`);
-                            log(`**Player Action (extreme loop-break)**: ${action}\n`);
                         }
-                        // Clear detection window after breaking
                         recentChoiceSets.length = 0;
                     } else {
                         consecutiveLoopBreaks = 0;
-                        // Normal choice: weighted toward earlier (main path) options
                         const idx = Math.random() < 0.6 ? 0 : Math.floor(Math.random() * options.length);
                         chosenText = `Player chooses: ${options[idx].text}`;
                         console.log(`\n[AUTO] Chose option ${idx + 1}: ${options[idx].text}`);
                         log(`**Player Choice**: Option ${idx + 1} — ${options[idx].text}\n`);
                     }
                 } else {
-                    // Use a rotating action from the pool
-                    const action = AUTO_ACTIONS[autoActionIdx % AUTO_ACTIONS.length];
-                    autoActionIdx++;
-                    chosenText = `Player: ${action}`;
-                    console.log(`\n[AUTO] Free action: ${action}`);
-                    log(`**Player Action**: ${action}\n`);
+                    // ── No choice/dice-roll frame — story didn't ask for interaction ────
+                    // Always send [continue] — only interact when the story prompts it.
+                    {
+                        chosenText = '[continue]';
+                        console.log(`\n[AUTO] [continue]`);
+                        log(`*[continue]*\n`);
+                    }
                 }
                 messages.push({ role: 'user', content: [{ type: 'text', text: chosenText }] });
             } else {
@@ -756,14 +754,24 @@ async function run() {
 
             if (isRecoverable) {
                 consecutiveSuccesses = 0;
-                console.error(`\n[Turn ${turnNumber} error (${e?.name ?? 'unknown'}) — recovering]`);
+                consecutiveErrors++;
+                console.error(`\n[Turn ${turnNumber} error (${e?.name ?? 'unknown'}) — recovering (${consecutiveErrors}/${MAX_CONSECUTIVE_ERRORS})]`);
                 finishTrace('error', e);
 
-                // Only downgrade on timeout/quota errors. Transient empty responses just retry same model.
-                if (isTimeout || isQuotaOrRateLimitError(e)) {
+                if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+                    console.error(`\n[FATAL] ${MAX_CONSECUTIVE_ERRORS} consecutive errors — stopping to avoid infinite loop`);
+                    if (AUTO_MODE) log(`\n**STOPPED**: ${MAX_CONSECUTIVE_ERRORS} consecutive errors (likely quota exhausted)\n`);
+                    keepPlaying = false;
+                    continue;
+                }
+
+                // Downgrade on timeout/quota errors, or after 2+ consecutive errors (likely hidden quota).
+                const shouldDowngrade = isTimeout || isQuotaOrRateLimitError(e) || consecutiveErrors >= 2;
+                if (shouldDowngrade) {
+                    const reason = isQuotaOrRateLimitError(e) ? 'quota' : isTimeout ? 'timeout' : `${consecutiveErrors} consecutive errors`;
                     const newModel = downgradeModel('storyteller');
-                    console.log(`[Downgraded to ${newModel}, continuing next turn...]`);
-                    if (AUTO_MODE) log(`**Turn ${turnNumber} error**: ${e?.name} — downgraded to ${newModel}\n`);
+                    console.log(`[Downgraded to ${newModel} (${reason}), continuing next turn...]`);
+                    if (AUTO_MODE) log(`**Turn ${turnNumber} error**: ${e?.name} — downgraded to ${newModel} (${reason})\n`);
                     agent = createStorytellerAgent(vnPackage, sessionId);
                 } else {
                     console.log(`[Transient error (${e?.name}), retrying with same model...]`);

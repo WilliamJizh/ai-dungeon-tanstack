@@ -150,18 +150,16 @@ VNPackage {
 
 ### conversation[] (VNFrame field)
 
-Ordered conversation lines within one frame. Replaces single `dialogue` for multi-speaker scenes.
+Ordered conversation lines within one frame. Replaces single `dialogue` for multi-speaker scenes. Discriminated union — two entry shapes:
 
 ```typescript
-conversation?: Array<{
-  speaker: string       // Character name — renderer matches to panel via characterAsset
-  text: string
-  isNarrator?: boolean  // true = narration beat between dialogue lines, no panel shift
-  effect?: VNEffect     // Per-line effect triggered when this line appears
-}>
+conversation?: Array<
+  | { speaker: string; text: string; effect?: VNEffect }   // Dialogue spoken aloud → speech bubble
+  | { narrator: string; effect?: VNEffect }                 // Action, thought, stage direction → narrator box
+>
 ```
 
-Panels define who is present (up to 3). The renderer auto-shifts panel focus by matching speaker name to the panel's `characterAsset`.
+Panels define who is present (up to 3). The renderer auto-shifts panel focus by matching `speaker` to the panel's `characterAsset`. `{narrator}` entries render as narrator text boxes without shifting panel focus.
 
 ### narrations[] (VNFrame field)
 
@@ -345,11 +343,11 @@ Assets referenced by slug keys (`"harbor-night"`) not paths. Enables substitutio
 ### Three-Gear Pacing Model & Subjective Prose
 Storyteller varies frame density and prose style based on narrative pace, heavily inspired by modern visual novels:
 - **First gear** (slow): Atmosphere and world-building. Heavy use of `full-screen` frames with `narrations[]`, environmental effects.
-- **Second gear** (medium): Dialogue and investigation. `dialogue` / `three-panel` frames with `conversation[]`. Employs **Dialogue Dissonance** (characters deflecting, speaking on parallel tracks) and **Subjectivity as Action** (protagonist internally reacting via `isNarrator: true` beats intermixed in conversation).
+- **Second gear** (medium): Dialogue and investigation. `dialogue` / `three-panel` frames with `conversation[]`. Employs **Dialogue Dissonance** (characters deflecting, speaking on parallel tracks) and **Subjectivity as Action** (protagonist internally reacting via `{narrator:"..."}` beats intermixed in conversation).
 - **Third gear** (fast): Crisis and action. Rapid short frames, `shake`/`screen-crack` effects. Employs **Micro-Pacing (Breathless Fragments)** where narrations break down into 1-to-3 sentence chunks or frightened gasps. Tension is often deliberately punctured by **Banality** (e.g. an annoying ringtone during a tense standoff).
 
 ### Multi-Speaker Conversations
-`conversation[]` replaces single `dialogue` for scenes with multiple speakers. Each entry carries a `speaker` name; the renderer auto-highlights the matching panel. Inline `isNarrator: true` entries inject short, subjective narration beats between dialogue lines without shifting panel focus. Per-line `effect` fields let individual lines trigger visual effects (e.g., `text-shake` on a threatening line).
+`conversation[]` replaces single `dialogue` for scenes with multiple speakers. Two entry shapes: `{speaker, text}` for spoken dialogue (renderer auto-highlights matching panel), and `{narrator:"..."}` for subjective narration beats between dialogue lines (no panel shift). Per-line `effect` fields let individual lines trigger visual effects (e.g., `text-shake` on a threatening line).
 
 ### Actions & Mechanics (PbtA 2d6 System)
 Skill checks, risky actions, and combat resolution are handled via a Powered by the Apocalypse (PbtA) 2d6 system.

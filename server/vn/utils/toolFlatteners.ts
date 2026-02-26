@@ -12,7 +12,7 @@ export const TOOL_FLATTENERS: Record<string, ToolHistoryFlattener> = {
             let narrative = '';
             if (args.conversation && Array.isArray(args.conversation)) {
                 narrative = args.conversation.map((line: any) => {
-                    if (line.isNarrator) return `${line.text}`;
+                    if ('narrator' in line) return `${line.narrator}`;
                     return `${line.speaker ? line.speaker + ': ' : ''}"${line.text}"`;
                 }).join(' ');
             }

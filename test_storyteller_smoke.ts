@@ -162,11 +162,12 @@ async function run() {
             if (Array.isArray(conversation) && conversation.length > 0) {
               stats.conversationLineCount += conversation.length;
               for (const line of conversation) {
-                if (!line.isNarrator) stats.dialogueSpeakers.push(line.speaker || 'unknown');
+                if (!('narrator' in line)) stats.dialogueSpeakers.push(line.speaker || 'unknown');
                 if (line.effect) stats.perLineEffects.push(line.effect.type);
+                const lineText = 'narrator' in line ? line.narrator : line.text;
                 for (const phrase of BANNED_PHRASES) {
-                  if (line.text.toLowerCase().includes(phrase.toLowerCase())) {
-                    stats.bannedPhraseViolations.push(`"${phrase}" in conversation: "${line.text.substring(0, 80)}..."`);
+                  if (lineText.toLowerCase().includes(phrase.toLowerCase())) {
+                    stats.bannedPhraseViolations.push(`"${phrase}" in conversation: "${lineText.substring(0, 80)}..."`);
                   }
                 }
               }
@@ -202,8 +203,8 @@ async function run() {
             if (Array.isArray(conversation) && conversation.length > 0) {
               conversation.forEach((line: any) => {
                 const eff = line.effect ? ` [${line.effect.type}]` : '';
-                if (line.isNarrator) {
-                  console.log(`      📝 ${line.text.substring(0, 200)}${line.text.length > 200 ? '...' : ''}${eff}`);
+                if ('narrator' in line) {
+                  console.log(`      📝 ${line.narrator.substring(0, 200)}${line.narrator.length > 200 ? '...' : ''}${eff}`);
                 } else {
                   console.log(`      🗣️  ${line.speaker}: "${line.text.substring(0, 200)}${line.text.length > 200 ? '...' : ''}"${eff}`);
                 }

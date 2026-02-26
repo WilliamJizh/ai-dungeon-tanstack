@@ -1,5 +1,6 @@
 import { generateText } from 'ai';
-import { getModel } from '../../lib/modelFactory.js';
+import { getDirectorModel, getDirectorModelInfo } from '../../lib/modelFactory.js';
+import { tracedGenerateText } from '../../debug/traceAI.js';
 import type { VNPackage, Act, Location, PlotState, Encounter, CharacterState, ActiveComplication, OpposingForceState } from '../types/vnTypes.js';
 
 // ─── Direction Pack: the Director's output consumed by plotStateTool ─────────
@@ -161,9 +162,10 @@ Evaluate the player's action in context. Then produce a JSON response with:
    - Tension level and emotional tone
    - Any secrets to hint at or withhold
    - Whether to inject complication pressure
+   - If uncertain actions occur, remind Storyteller to use dice-roll frames — never allow narrated stat bonuses like "洞察+3" or "Perception +3 helped them notice..."
 
 2. **stateMutations** (object): State changes to apply:
-   - progressionDelta: number — IMPORTANT: Award +1 whenever the player completes an encounter that has [+N progression], solves a puzzle, obtains a key item, or reaches a major story milestone. Do NOT be conservative — if the player's action clearly advances the plot, award progression. The story cannot move to the next act until progression reaches the required value. Currently at ${currentState.globalProgression}/${currentAct.globalProgression?.requiredValue ?? '?'}.
+   - progressionDelta: number — Award +1 ONLY when the player makes a meaningful CHOICE or ACTION: choosing a path, making a decision, succeeding/failing a skill check, completing an encounter, discovering a key clue, or having a pivotal NPC interaction. Progression = player agency. Do NOT award progression for turns where the player just said "[continue]" — that means they haven't made a decision yet. Currently at ${currentState.globalProgression}/${currentAct.globalProgression?.requiredValue ?? '?'}. PACING RULE: Aim for 1 progression per 2-3 player decisions. If the Storyteller isn't offering choices, include in your directorBrief: "Present the player with a meaningful choice this turn."
    - doomClockDelta: number (0 normally, +1 if player wasted time or made noise)
    - characterUpdates: array of { characterId, disposition?, newLocationId? }
    - setComplication: { description, maxTurns } or null to clear
@@ -171,7 +173,15 @@ Evaluate the player's action in context. Then produce a JSON response with:
    - injectEncounters: array of { locationId, encounter } to add new encounters
    - directorNotes: object — your scratchpad for next evaluation
 
-3. **suggestedEncounterId** (string|null): Which encounter from the available pool to suggest.
+3. **suggestedEncounterId** (string|null): Which encounter from the available pool to suggest. ALWAYS suggest one if any are available — don't let encounters sit unused.
+
+PACING IMPERATIVES:
+- Every turn should feel like progress. Even "failed" actions should unlock new information or shift NPC attitudes.
+- If the player has been stalling (sending "[continue]" without making choices), DO NOT award progression. Instead, CREATE EVENTS to force a decision: inject a complication, have an NPC burst in with urgent news, trigger a threat that demands immediate action. The player MUST be pushed to make a choice.
+- If 3+ turns pass without progression, use setComplication or injectEncounters to create dramatic pressure. Example: an enemy arrives, a timer starts, a secret is revealed that demands a response.
+- The Storyteller MUST present player choices every turn. If they aren't, include in your directorBrief: "IMPORTANT: End this turn with a choice frame — give the player 2-3 options."
+- Suggest TRAVEL to a new location when the current location's key encounters are exhausted.
+- Reference the player's PAST FLAGS and choices in your brief — callbacks to earlier decisions make the story feel responsive.
 
 Respond with ONLY valid JSON. No markdown fences, no explanation outside the JSON.`;
 }
@@ -197,10 +207,43 @@ export async function runDirector(input: {
     })),
   });
 
-  const { text } = await generateText({
-    model: getModel('storyteller'),
-    prompt,
-  });
+  const { provider, modelId } = getDirectorModelInfo();
+
+  // Retry with increasing timeouts: 60s → 90s → 120s (DeepSeek is fast; Opus needed 120s+)
+  const DIRECTOR_TIMEOUTS = [60_000, 90_000, 120_000];
+  let text: string = '';
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt < DIRECTOR_TIMEOUTS.length; attempt++) {
+    try {
+      const directorTimeout = AbortSignal.timeout(DIRECTOR_TIMEOUTS[attempt]);
+      if (attempt > 0) {
+        console.log(`[Director] Retry attempt ${attempt + 1}/${DIRECTOR_TIMEOUTS.length} (timeout: ${DIRECTOR_TIMEOUTS[attempt] / 1000}s)`);
+      }
+      const result = await tracedGenerateText({
+        model: getDirectorModel(),
+        prompt,
+        abortSignal: directorTimeout,
+      }, {
+        sessionId: input.currentState.sessionId,
+        pipeline: 'vn-director',
+        agentId: 'director-agent',
+        modelProvider: provider,
+        modelId,
+        source: 'runDirector',
+      });
+      text = result.text;
+      lastError = undefined;
+      break; // Success — exit retry loop
+    } catch (err) {
+      lastError = err;
+      const isTimeout = err instanceof DOMException && err.name === 'TimeoutError';
+      if (!isTimeout || attempt === DIRECTOR_TIMEOUTS.length - 1) {
+        throw err; // Non-timeout error or final attempt — propagate
+      }
+      console.warn(`[Director] Timeout after ${DIRECTOR_TIMEOUTS[attempt] / 1000}s on attempt ${attempt + 1}, retrying...`);
+    }
+  }
 
   // Parse the Director's JSON response leniently
   try {

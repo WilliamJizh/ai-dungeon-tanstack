@@ -95,14 +95,20 @@ export const VNFrameSchema = z.object({
     position: z.enum(['bubble', 'bottom']).optional(),
   }).optional(),
   /** Ordered conversation lines within one frame. Replaces single `dialogue`.
+   *  Two shapes: {speaker,text} for spoken dialogue, {narrator} for actions/thoughts.
    *  Panels define who's present (up to 3). Renderer auto-shifts panel focus by matching
    *  speaker name to panel's characterAsset. */
-  conversation: z.array(z.object({
-    speaker: z.string().describe('Character name — renderer matches to panel via characterAsset'),
-    text: z.string(),
-    isNarrator: z.boolean().optional().describe('true = narration beat between dialogue lines, no panel shift'),
-    effect: VNEffectSchema.optional().describe('Effect triggered when this line appears'),
-  })).optional(),
+  conversation: z.array(z.union([
+    z.object({
+      speaker: z.string().describe('Character name — renderer matches to panel via characterAsset'),
+      text: z.string(),
+      effect: VNEffectSchema.optional().describe('Effect triggered when this line appears'),
+    }),
+    z.object({
+      narrator: z.string().describe('Narration beat: action, thought, or stage direction between dialogue'),
+      effect: VNEffectSchema.optional().describe('Effect triggered when this line appears'),
+    }),
+  ])).optional(),
   /** Narration box (no speaker attribution). @deprecated Use narrations[] instead. */
   narration: z.object({
     text: z.string(),

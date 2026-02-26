@@ -82,7 +82,7 @@ All generated text — dialogue, narration, character speech, skill check descri
 2. **Sensory Anchoring First:** Ground in textures, temperature, smell before plot advancement.
 3. **Deflation of Tension:** Interrupt stakes with extreme banality for dramatic contrast.
 4. **Micro-Pacing:** Short 1-3 sentence bursts. In dramatic moments, single words via `narrations[]`.
-5. **Dialogue Dissonance:** Non-sequiturs, trivialities during serious moments. Use `isNarrator: true` for protagonist reactions.
+5. **Dialogue Dissonance:** Non-sequiturs, trivialities during serious moments. Use `{narrator:"..."}` for protagonist reactions.
 6. **Banned phrases:** "palpable tension", "sent shivers down", "a sense of", etc.
 
 ### DM Workflow (Per Turn)
@@ -254,7 +254,7 @@ Key fields:
   id: string                        // Unique descriptive slug
   type: FrameType                   // One of 12 types
   panels: VNPanel[]
-  conversation?: [{ speaker, text, isNarrator?, effect? }]
+  conversation?: [{ speaker, text, effect? } | { narrator, effect? }]
   narrations?: [{ text, effect? }]
   choices?: [{ id, text, hint? }]
   showFreeTextInput?: boolean

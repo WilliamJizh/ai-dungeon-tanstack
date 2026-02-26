@@ -175,10 +175,11 @@ export function sanitizeHistory(rawMessages: any[]): any[] {
 
 // ── Watermark thresholds ────────────────────────────────────────────────────
 // When messages exceed HIGH_WATER, summarize the oldest batch and cut to LOW_WATER.
-// Gemini stalls on conversations > ~14 messages with tool call/result pairs.
-// Aggressive compression keeps conversations compact.
-const HIGH_WATER = 10;
-const LOW_WATER = 6;
+// With 2-8 frames/turn, each turn generates ~4-16 messages (tool-call/result pairs).
+// Too aggressive compression (old: 10/6) wipes ALL history after 1 turn, causing
+// the model to re-narrate scenes and lose continuity. Keep enough for 2-3 turns.
+const HIGH_WATER = 24;
+const LOW_WATER = 14;
 
 /**
  * Summarizes a batch of messages into a concise narrative paragraph.
@@ -208,14 +209,18 @@ async function summarizeBatch(
     const prompt = `You are a narrative compressor for an interactive fiction game.
 
 PREVIOUS SUMMARY:
-${oldSummary || "No previous events."}
+${oldSummary || "(This is the very beginning of the story — no previous events.)"}
 
 RECENT EVENTS (${context}):
 ${rawText}
 
-Task: Write a concise, 2-3 sentence summary of the "RECENT EVENTS" and append it logically to the "PREVIOUS SUMMARY". 
-Focus ONLY on major plot points, permanent inventory/status changes, and choices made. Omit mechanical details, combat turn-by-turn logs, or atmospheric fluff. Write in the same language as the text provided.
-Return ONLY the newly combined summary text.`;
+RULES:
+- Write a concise 2-4 sentence summary combining PREVIOUS SUMMARY + RECENT EVENTS.
+- Focus ONLY on: plot-advancing actions, discoveries, items obtained, NPCs met, choices made, locations visited, flags/state changes.
+- Omit: atmospheric descriptions, combat details, repeated scene re-narrations.
+- CRITICAL: Do NOT invent events that aren't in the text above. Do NOT reference other stories.
+- Write in the same language as the text provided.
+- Return ONLY the combined summary text, nothing else.`;
 
     const { text: newSummary } = await generateText({
         model: getModel('summarizer'),

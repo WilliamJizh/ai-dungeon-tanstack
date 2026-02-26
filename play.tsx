@@ -22,7 +22,7 @@ interface RenderedFrame {
   assets?: string;
   music?: string;
   narrations?: { text: string; effect?: string }[];
-  conversation?: { speaker: string; text: string; isNarrator?: boolean; effect?: string }[];
+  conversation?: ({ speaker: string; text: string; effect?: string } | { narrator: string; effect?: string })[];
   effects?: string;
   skillCheck?: { stat: string; dc: number; roll: number; mod: number; total: number; success: boolean; desc: string };
   diceRoll?: { notation: string; roll?: number; description: string };
@@ -83,9 +83,10 @@ function parseFrame(toolInput: any, toolOutput: any): RenderedFrame {
   const rawDialogue = frame.dialogue ?? toolInput?.dialogue;
   let conversation: RenderedFrame['conversation'];
   if (Array.isArray(rawConvo) && rawConvo.length > 0) {
-    conversation = rawConvo.map((l: any) => ({
-      speaker: l.speaker, text: l.text, isNarrator: l.isNarrator, effect: l.effect?.type,
-    }));
+    conversation = rawConvo.map((l: any) => {
+      if ('narrator' in l) return { narrator: l.narrator, effect: l.effect?.type };
+      return { speaker: l.speaker, text: l.text, effect: l.effect?.type };
+    });
   } else if (rawDialogue?.text) {
     conversation = [{ speaker: rawDialogue.speaker || 'Character', text: rawDialogue.text }];
   }
@@ -180,9 +181,9 @@ function FrameView({ frame }: { frame: RenderedFrame }) {
       ))}
 
       {frame.conversation?.map((line, i) => (
-        line.isNarrator
-          ? <Text key={i} italic wrap="wrap">{'  '}{line.text}{line.effect ? <Text color="yellow"> [{line.effect}]</Text> : ''}</Text>
-          : <Text key={i} wrap="wrap">{'  '}<Text bold color="cyan">{line.speaker}:</Text> {line.text}{line.effect ? <Text color="yellow"> [{line.effect}]</Text> : ''}</Text>
+        'narrator' in line
+          ? <Text key={i} italic wrap="wrap">{'  '}{line.narrator}{line.effect ? <Text color="yellow"> [{line.effect}]</Text> : ''}</Text>
+          : <Text key={i} wrap="wrap">{'  '}<Text bold color="cyan">{(line as any).speaker}:</Text> {(line as any).text}{line.effect ? <Text color="yellow"> [{line.effect}]</Text> : ''}</Text>
       ))}
 
       {frame.effects && <Text color="yellow">  Effects: {frame.effects}</Text>}

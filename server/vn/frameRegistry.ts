@@ -12,25 +12,30 @@ export interface FrameRegistryEntry {
   requiresNarration?: boolean;
   /** VNFrame property that holds this frame type's payload (e.g. 'tacticalMapData'). */
   dataField?: string;
+  /** If true, always included in the storyteller's static system prompt.
+   *  Extended types are injected on demand via plotStateTool's frameGuides. */
+  core?: boolean;
 }
 
 // ─── Per-type workflow strings ────────────────────────────────────────────────
 
-const DICE_ROLL_WORKFLOW = `dice-roll — Show physics dice rolling BEFORE a skill-check or for any random event:
-  1. Set diceNotation to the dice being rolled (e.g. "1d20", "2d6", "1d8")
-  2. Set roll to your pre-computed value — it MUST match the roll value used in the following skill-check frame
-  3. Set description to a short label for what is being rolled (e.g. "Rolling Dexterity", "Damage Roll")
-  4. For ability checks: ALWAYS follow immediately with a skill-check frame`;
+const DICE_ROLL_WORKFLOW = `dice-roll — Physics dice animation for PbtA 2d6 rulings:
+  1. Set diceNotation to "2d6"
+  2. Do NOT set roll — the client computes it via physics simulation
+  3. Set description to a short label naming the stat + modifier (e.g. "2d6 + Logic (+2)")
+  4. The agent loop STOPS on this frame. Next turn receives "[dice-result] N".`;
 
-const SKILL_CHECK_WORKFLOW = `skill-check — Result display for ability checks (no dice animation — use dice-roll frame first):
-  1. Call playerStatsTool({ action: "read" }) to get their current stats
-  2. Pick the relevant attribute (strength/dexterity/intelligence/luck/charisma)
-  3. Compute: modifier = Math.floor((attributeValue - 10) / 2), roll = random 1-20, total = roll + modifier
-  4. Set difficulty (DC): easy=8, moderate=12, hard=16, very hard=20
-  5. Build a dice-roll frame FIRST: type="dice-roll", diceRoll: { diceNotation: "1d20", roll: COMPUTED_ROLL, description: "Rolling [stat]" }
-  6. Build the skill-check frame: type="skill-check", skillCheck: { stat, statValue, difficulty, roll: SAME_COMPUTED_ROLL, modifier, total, succeeded: total>=difficulty, description }
-  7. Follow with narrative frames reacting to the outcome (success/failure each lead different directions)
-  8. If HP changes (combat, hazard), call playerStatsTool({ action: "update", updates: { hp: newHp } })`;
+const SKILL_CHECK_WORKFLOW = `skill-check — Result display after a dice-roll ruling (PbtA 2d6):
+  1. You receive "[dice-result] N" at the start of the turn (N = 2d6 raw roll)
+  2. Look up the relevant PbtA stat modifier from the character (e.g. Logic +2)
+  3. total = N + modifier. Set difficulty: 10 (PbtA full-success threshold)
+  4. Determine outcome band:
+     - total 10+: Full Success — succeeded:true, description: what they achieved cleanly
+     - total 7-9: Mixed — succeeded:true, description: what they achieved AND the cost/complication
+     - total ≤6: Miss — succeeded:false, description: how the situation actively worsens
+  5. Build: skillCheck: { stat, statValue: MODIFIER, difficulty: 10, roll: N, modifier, total, succeeded: total>=7, description }
+  6. Follow with 1-2 narrative frames showing the consequence. The ruling is final — never soften a miss or skip a complication.
+  7. If HP changes, call playerStatsTool({ action: "update", updates: { hp: newHp } })`;
 
 const INVENTORY_WORKFLOW = `inventory — Use when player finds an item, opens their pack, or needs to choose an item:
   - To give an item: call playerStatsTool({ action: "addItem", item: { id, name, description, icon, quantity:1 } })
@@ -71,20 +76,24 @@ export const FRAME_REGISTRY: FrameRegistryEntry[] = [
     type: 'full-screen',
     agentSummary: `Atmosphere, dramatic reveals, location shots. 1 panel (id: "center"), backgroundAsset set. Use narrations[] array for multiple text beats on the same visual — player clicks through each. Optional per-beat effect.`,
     requiresNarration: true,
+    core: true,
   },
   {
     type: 'dialogue',
-    agentSummary: `Character conversation. 2 panels with backgroundAsset + characterAsset. Use conversation[] array with ordered {speaker, text} lines — renderer auto-shifts panel focus between speakers. Use isNarrator:true for narration beats between lines. Optional per-line effect.`,
+    agentSummary: `Character conversation. 2 panels with backgroundAsset + characterAsset. Use conversation[] array: {speaker, text} for spoken dialogue, {narrator:"..."} for actions/thoughts between lines. Renderer auto-shifts panel focus between speakers. Optional per-line effect.`,
     requiresNarration: true,
+    core: true,
   },
   {
     type: 'three-panel',
     agentSummary: `3 characters on screen. 3 panels: "left", "center", "right". Each needs backgroundAsset + characterAsset. Use conversation[] for multi-speaker dialogue.`,
     requiresNarration: true,
+    core: true,
   },
   {
     type: 'choice',
     agentSummary: `Decision point. 1–2 panels. Include choices[] with 2–4 options (id + text). Set showFreeTextInput: true if player can also type freely.`,
+    core: true,
   },
   {
     type: 'battle',
@@ -95,18 +104,21 @@ export const FRAME_REGISTRY: FrameRegistryEntry[] = [
     type: 'transition',
     agentSummary: `Scene/time change. panels: [] (empty). Set transition.type and transition.durationMs.`,
     dataField: 'transition',
+    core: true,
   },
   {
     type: 'dice-roll',
-    agentSummary: `Physics dice animation — reveals raw roll number, no outcome shown. Set diceRoll: { diceNotation, roll, description }. Always precedes a skill-check frame for ability checks.`,
+    agentSummary: `PbtA 2d6 ruling — physics dice animation, STOPS the loop. Set diceRoll: { diceNotation: "2d6", description: "2d6 + [Stat] (+N)" }. Do NOT set roll — client computes it. Always followed by skill-check on next turn.`,
     agentWorkflow: DICE_ROLL_WORKFLOW,
     dataField: 'diceRoll',
+    core: true,
   },
   {
     type: 'skill-check',
-    agentSummary: `Result display ONLY (no dice). Shows stat, DC vs total, success/failure. Include skillCheck: { stat, statValue, difficulty, roll, modifier, total, succeeded, description }. Always preceded by a dice-roll frame.`,
+    agentSummary: `Ruling result after dice-roll. Shows stat, modifier, roll, total, outcome. Set skillCheck: { stat, statValue, difficulty:10, roll, modifier, total, succeeded: total>=7, description }. 10+ full success, 7-9 mixed (succeeded but with cost), ≤6 miss.`,
     agentWorkflow: SKILL_CHECK_WORKFLOW,
     dataField: 'skillCheck',
+    core: true,
   },
   {
     type: 'inventory',
@@ -182,3 +194,8 @@ export const FRAME_REGISTRY: FrameRegistryEntry[] = [
 export const FRAME_REGISTRY_MAP = new Map<FrameType, FrameRegistryEntry>(
   FRAME_REGISTRY.map(e => [e.type, e]),
 );
+
+/** Non-core frame type names, used by frameGuideTool to list available types. */
+export function getExtendedFrameTypeNames(): string[] {
+  return FRAME_REGISTRY.filter(e => !e.core).map(e => e.type);
+}

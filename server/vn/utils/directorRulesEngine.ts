@@ -77,18 +77,18 @@ export function evaluateRules(
   }
 
   // 5. Stale progression detection — if many turns have passed without reaching
-  //    the act's progression threshold, invoke Director more urgently
+  //    the act's progression threshold, invoke Director to suggest more player choices
   if (act.globalProgression) {
     const { requiredValue } = act.globalProgression;
     const remaining = requiredValue - state.globalProgression;
     if (remaining > 0 && state.turnCount >= 8) {
       needsDirector = true;
-      reasons.push(`stale progression (${state.globalProgression}/${requiredValue} after ${state.turnCount} turns) — Director should award milestone progression`);
+      reasons.push(`stale progression (${state.globalProgression}/${requiredValue} after ${state.turnCount} turns) — Director should offer player a meaningful choice`);
     }
   }
 
-  // 6. Periodic Director refresh (every 3 turns)
-  if (state.turnCount > 0 && state.turnCount % 3 === 0) {
+  // 6. Periodic Director refresh (every 2 turns — Director must stay engaged for pacing)
+  if (state.turnCount > 0 && state.turnCount % 2 === 0) {
     needsDirector = true;
     reasons.push(`periodic refresh (turn ${state.turnCount})`);
   }
@@ -99,18 +99,11 @@ export function evaluateRules(
     reasons.push('first turn of session');
   }
 
-  // 8. Player query heuristics — detect interesting actions
-  const queryLower = playerQuery.toLowerCase();
-  const travelKeywords = ['go to', 'walk to', 'head to', 'travel', 'leave', 'exit', 'move to'];
-  const actionKeywords = ['attack', 'fight', 'search', 'examine', 'pick', 'steal', 'break', 'open', 'hide', 'run'];
-
-  if (travelKeywords.some(kw => queryLower.includes(kw))) {
+  // 8. Any real player input (not [continue]) always needs Director evaluation
+  const trimmedQuery = playerQuery.trim();
+  if (trimmedQuery && trimmedQuery !== '[continue]') {
     needsDirector = true;
-    reasons.push('travel intent detected');
-  }
-  if (actionKeywords.some(kw => queryLower.includes(kw))) {
-    needsDirector = true;
-    reasons.push('significant action detected');
+    reasons.push('player action/choice detected');
   }
 
   // Default reason if skipping

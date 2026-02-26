@@ -19,14 +19,31 @@ export const OPENROUTER_MODEL_IDS = {
   summarizer: process.env.OPENROUTER_SUMMARY_MODEL ?? 'anthropic/claude-3.5-haiku',
 } as const;
 
+export const CLIPROXY_MODEL_IDS = {
+  chat: process.env.CLIPROXY_CHAT_MODEL ?? 'claude-sonnet-4-6',
+  storyteller: process.env.CLIPROXY_STORY_MODEL ?? 'claude-opus-4-6',
+  planning: process.env.CLIPROXY_PLANNING_MODEL ?? 'claude-sonnet-4-6',
+  summarizer: process.env.CLIPROXY_SUMMARY_MODEL ?? 'claude-haiku-4-5-20251001',
+} as const;
+
+export const VOLCENGINE_MODEL_IDS = {
+  chat:        process.env.VOLCENGINE_CHAT_MODEL    ?? 'doubao-seed-2.0-code',
+  storyteller: process.env.VOLCENGINE_STORY_MODEL   ?? 'doubao-seed-2.0-code',
+  planning:    process.env.VOLCENGINE_PLANNING_MODEL ?? 'doubao-seed-2.0-code',
+  summarizer:  process.env.VOLCENGINE_SUMMARY_MODEL  ?? 'doubao-seed-2.0-code',
+} as const;
+
 export type ModelRole = keyof typeof MODEL_IDS;
 
 const PROVIDER = process.env.AI_PROVIDER ?? 'google';
+const CLIPROXY_FORCE_NON_STREAM = !['0', 'false', 'off', 'no'].includes(
+  (process.env.CLIPROXY_FORCE_NON_STREAM ?? 'true').trim().toLowerCase(),
+);
 
 // ── Model downgrade fallback chain ───────────────────────────────────────────
 // On quota/rate-limit errors, call downgradeModel(role) to step down one tier.
 const GEMINI_FALLBACK_CHAIN: Record<string, string[]> = {
-  storyteller: [MODEL_IDS.storyteller, 'gemini-3-pro-preview', 'gemini-3-flash-preview'],
+  storyteller: [MODEL_IDS.storyteller, 'gemini-3-flash-preview'],
   planning:    [MODEL_IDS.planning, 'gemini-3-pro-preview', 'gemini-3-flash-preview'],
   summarizer:  [MODEL_IDS.summarizer, 'gemini-3-flash-preview'],
   chat:        [MODEL_IDS.chat, 'gemini-3-pro-preview', 'gemini-3-flash-preview'],
@@ -34,8 +51,23 @@ const GEMINI_FALLBACK_CHAIN: Record<string, string[]> = {
 
 const modelOverrides = new Map<string, string>();
 
+/** Get the configured (non-overridden) model ID for a role, respecting provider. */
+function getBaseModelId(role: ModelRole): string {
+  if (PROVIDER === 'volcengine') return VOLCENGINE_MODEL_IDS[role];
+  if (PROVIDER === 'cliproxy') return CLIPROXY_MODEL_IDS[role];
+  if (PROVIDER === 'openrouter' && process.env.OPENROUTER_API_KEY) {
+    return OPENROUTER_MODEL_IDS[role];
+  }
+  return MODEL_IDS[role];
+}
+
 /** Step down to the next model in the fallback chain. Returns new model ID or null if exhausted. */
 export function downgradeModel(role: ModelRole): string | null {
+  // OpenRouter / cliproxy / volcengine have no fallback chain — no downgrade available
+  if (PROVIDER === 'openrouter' || PROVIDER === 'cliproxy' || PROVIDER === 'volcengine') {
+    console.log(`[ModelFactory] Downgrade skipped for ${role}: ${PROVIDER} has no fallback chain`);
+    return null;
+  }
   const currentId = modelOverrides.get(role) ?? MODEL_IDS[role];
   const chain = GEMINI_FALLBACK_CHAIN[role] ?? [];
   // Deduplicate chain (env might already point to a fallback model)
@@ -58,9 +90,9 @@ export function downgradeModel(role: ModelRole): string | null {
   return currentId; // Return current model instead of null — never truly exhaust
 }
 
-/** Reset a role back to its original (best) model. */
+/** Reset a role back to its original (best) model. Returns the base model ID for the active provider. */
 export function resetModel(role: ModelRole): string {
-  const original = MODEL_IDS[role];
+  const original = getBaseModelId(role);
   const current = modelOverrides.get(role);
   if (current && current !== original) {
     modelOverrides.delete(role);
@@ -69,15 +101,34 @@ export function resetModel(role: ModelRole): string {
   return original;
 }
 
-/** Check if an error is a quota or rate-limit error. */
+/** Check if an error (or any error in its `.cause` chain) is a quota, rate-limit, or payment-required error. */
 export function isQuotaOrRateLimitError(err: unknown): boolean {
-  const msg = String((err as any)?.message ?? '');
-  return msg.includes('429') || msg.includes('quota') || msg.includes('RESOURCE_EXHAUSTED')
-    || msg.includes('rate limit') || msg.includes('Too Many Requests');
+  let current: unknown = err;
+  const seen = new Set<unknown>();
+  while (current && !seen.has(current)) {
+    seen.add(current);
+    const e = current as any;
+    const msg = String(e?.message ?? '');
+    if (msg.includes('429') || msg.includes('402') || msg.includes('quota') || msg.includes('RESOURCE_EXHAUSTED')
+      || msg.includes('rate limit') || msg.includes('Too Many Requests')
+      || msg.includes('requires more credits') || msg.includes('Payment Required')) {
+      return true;
+    }
+    // AI SDK errors may also expose statusCode directly
+    if (e?.statusCode === 429 || e?.statusCode === 402) return true;
+    // Check responseBody for quota/credit errors (AI_APICallError)
+    if (typeof e?.responseBody === 'string' && (
+      e.responseBody.includes('RESOURCE_EXHAUSTED') || e.responseBody.includes('requires more credits')
+    )) return true;
+    current = e?.cause;
+  }
+  return false;
 }
 
 let _googleClient: ReturnType<typeof createGoogleGenerativeAI> | null = null;
 let _openRouterClient: ReturnType<typeof createOpenRouter> | null = null;
+let _cliproxyClient: ReturnType<typeof createOpenRouter> | null = null;
+let _volcengineClient: ReturnType<typeof createOpenRouter> | null = null;
 
 export function getGoogleClient(): ReturnType<typeof createGoogleGenerativeAI> {
   if (!_googleClient) {
@@ -97,7 +148,37 @@ export function getOpenRouterClient(): ReturnType<typeof createOpenRouter> {
   return _openRouterClient;
 }
 
-import { wrapLanguageModel } from 'ai';
+export function getCliProxyClient(): ReturnType<typeof createOpenRouter> {
+  if (!_cliproxyClient) {
+    const baseURL = process.env.CLIPROXY_BASE_URL ?? 'http://localhost:8317/v1';
+    const apiKey = process.env.CLIPROXY_API_KEY ?? 'your-api-key-1';
+    // Use @openrouter/ai-sdk-provider pointed at local proxy (handles tool calls correctly)
+    // Note: streaming has CJK garbling from proxy — use generateText (non-streaming) to avoid
+    _cliproxyClient = createOpenRouter({ apiKey, baseURL });
+  }
+  return _cliproxyClient;
+}
+
+export function getVolcengineClient(): ReturnType<typeof createOpenRouter> {
+  if (!_volcengineClient) {
+    const apiKey = process.env.VOLCENGINE_API_KEY;
+    if (!apiKey) throw new Error('VOLCENGINE_API_KEY is not set');
+    const baseURL = process.env.VOLCENGINE_BASE_URL ?? 'https://ark.cn-beijing.volces.com/api/coding/v3';
+    _volcengineClient = createOpenRouter({
+      apiKey,
+      baseURL,
+      fetch: (url, init) => {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 120_000);
+        return globalThis.fetch(url, { ...init, signal: controller.signal })
+          .finally(() => clearTimeout(timeout));
+      },
+    });
+  }
+  return _volcengineClient;
+}
+
+import { simulateStreamingMiddleware, wrapLanguageModel } from 'ai';
 import { appendTraceStep, completeTrace, createTrace, type TraceContext } from '../debug/traceStore.js';
 
 // ── Centralized LLM tracing ─────────────────────────────────────────────────
@@ -253,9 +334,15 @@ export function startLLMTrace(
  * Returns the currently active provider and model id for a given role.
  */
 export function getActiveModelInfo(role: ModelRole): { provider: string, modelId: string } {
+  if (PROVIDER === 'volcengine') {
+    return { provider: 'volcengine', modelId: modelOverrides.get(role) ?? VOLCENGINE_MODEL_IDS[role] };
+  }
+  if (PROVIDER === 'cliproxy') {
+    return { provider: 'cliproxy', modelId: modelOverrides.get(role) ?? CLIPROXY_MODEL_IDS[role] };
+  }
   if (PROVIDER === 'openrouter') {
     if (process.env.OPENROUTER_API_KEY) {
-      return { provider: 'openrouter', modelId: OPENROUTER_MODEL_IDS[role] };
+      return { provider: 'openrouter', modelId: modelOverrides.get(role) ?? OPENROUTER_MODEL_IDS[role] };
     }
   }
   return { provider: 'google', modelId: modelOverrides.get(role) ?? MODEL_IDS[role] };
@@ -266,6 +353,12 @@ export function getActiveModelInfo(role: ModelRole): { provider: string, modelId
  * Fallbacks to Google if AI_PROVIDER is not openrouter or if OPENROUTER_API_KEY is missing.
  */
 export function getModel(role: ModelRole) {
+  if (PROVIDER === 'volcengine') {
+    return getVolcengineModel(role);
+  }
+  if (PROVIDER === 'cliproxy') {
+    return getCliProxyModel(role);
+  }
   if (PROVIDER === 'openrouter') {
     // Only attempt OpenRouter if a key is explicitly set
     if (process.env.OPENROUTER_API_KEY) {
@@ -398,6 +491,165 @@ export function getOpenRouterModel(role: ModelRole) {
       },
     }
   });
+}
+
+/**
+ * Returns a Volcengine (火山引擎) language model for the given role.
+ * Uses the Coding Plan endpoint (ark.cn-beijing.volces.com/api/coding/v3).
+ */
+export function getVolcengineModel(role: ModelRole) {
+  const modelId = modelOverrides.get(role) ?? VOLCENGINE_MODEL_IDS[role];
+  const model = getVolcengineClient()(modelId, {
+    usage: { include: true }
+  });
+
+  const middleware: any = {
+    specificationVersion: 'v3',
+    wrapGenerate: async ({ doGenerate, params }: any) => {
+      const llmStart = Date.now();
+      const toolNames = params.tools ? Object.keys(params.tools).join(', ') : 'none';
+      console.log(`  [Volcengine LLM Call] Starting... model=${modelId} tools=[${toolNames}]`);
+      try {
+        const result = await doGenerate();
+        const llmMs = Date.now() - llmStart;
+        const reason = typeof result.finishReason === 'string' ? result.finishReason : JSON.stringify(result.finishReason);
+        const toolCallCount = result.toolCalls?.length ?? 0;
+        const usage = result.usage ? `in=${result.usage.promptTokens} out=${result.usage.completionTokens}` : '';
+        console.log(`  [Volcengine LLM Call] Done in ${llmMs}ms | reason=${reason} | toolCalls=${toolCallCount} | ${usage}`);
+        capturePromptForTrace(params);
+        return result;
+      } catch (err) {
+        const llmMs = Date.now() - llmStart;
+        console.error(`  [Volcengine LLM Call] FAILED after ${llmMs}ms:`, err);
+        throw err;
+      }
+    },
+  };
+
+  return wrapLanguageModel({
+    model,
+    middleware: role === 'storyteller'
+      ? [simulateStreamingMiddleware(), middleware]
+      : middleware,
+  });
+}
+
+/**
+ * Returns a model via the local cliproxyapi (OpenAI-compatible proxy for Anthropic).
+ */
+export function getCliProxyModel(role: ModelRole) {
+  const modelId = modelOverrides.get(role) ?? CLIPROXY_MODEL_IDS[role];
+  const model = getCliProxyClient()(modelId, {
+    usage: { include: true }
+  });
+
+  const forceNonStream = CLIPROXY_FORCE_NON_STREAM && role === 'storyteller';
+  const middleware = {
+    specificationVersion: 'v3' as const,
+    wrapGenerate: async ({ doGenerate, params }: any) => {
+      const llmStart = Date.now();
+      const toolNames = params.tools ? Object.keys(params.tools).join(', ') : 'none';
+      console.log(`  [CliProxy LLM Call] Starting... model=${modelId} tools=[${toolNames}]`);
+      try {
+        const result = await doGenerate();
+
+        // Fix cliproxy quirks: strip 'proxy_' prefix from tool names and
+        // deserialize stringified nested objects in tool call arguments
+        if (Array.isArray(result.toolCalls)) {
+          for (const tc of result.toolCalls) {
+            if (tc.toolName?.startsWith('proxy_')) {
+              tc.toolName = tc.toolName.slice(6);
+            }
+            if (typeof tc.args === 'object' && tc.args !== null) {
+              for (const key of Object.keys(tc.args)) {
+                const val = tc.args[key];
+                if (typeof val === 'string' && (val.startsWith('[') || val.startsWith('{'))) {
+                  try { tc.args[key] = JSON.parse(val); } catch {}
+                }
+              }
+            }
+          }
+        }
+        // Also fix content parts (V3 format)
+        if (Array.isArray(result.content)) {
+          for (const part of result.content) {
+            if (part.type === 'tool-call' && part.toolName?.startsWith('proxy_')) {
+              part.toolName = part.toolName.slice(6);
+            }
+            if (part.type === 'tool-call' && typeof part.input === 'object' && part.input !== null) {
+              for (const key of Object.keys(part.input)) {
+                const val = part.input[key];
+                if (typeof val === 'string' && (val.startsWith('[') || val.startsWith('{'))) {
+                  try { part.input[key] = JSON.parse(val); } catch {}
+                }
+              }
+            }
+          }
+        }
+
+        const llmMs = Date.now() - llmStart;
+        const reason = typeof result.finishReason === 'string' ? result.finishReason : JSON.stringify(result.finishReason);
+        const usage = result.usage ? `in=${result.usage.promptTokens} out=${result.usage.completionTokens}` : '';
+        const toolCallCount = result.toolCalls?.length ?? 0;
+
+        const textContent = result.text ?? '';
+        const textPreview = textContent.length > 300 ? textContent.substring(0, 300) + '...' : textContent;
+        console.log(`  [CliProxy LLM Call] Done in ${llmMs}ms | reason=${reason} | toolCalls=${toolCallCount} | ${usage}`);
+        if (textPreview.trim()) {
+          console.log(`  [CliProxy LLM Text] ${textPreview}`);
+        }
+
+        capturePromptForTrace(params);
+        return result;
+      } catch (err) {
+        const llmMs = Date.now() - llmStart;
+        console.error(`  [CliProxy LLM Call] FAILED after ${llmMs}ms:`, err);
+        throw err;
+      }
+    },
+    wrapStream: async ({ doStream, params }: any) => {
+      const llmStart = Date.now();
+      const toolNames = params.tools ? Object.keys(params.tools).join(', ') : 'none';
+      console.log(`  [CliProxy LLM Stream] Starting... model=${modelId} tools=[${toolNames}]`);
+      capturePromptForTrace(params);
+      const result = await doStream();
+      const llmMs = Date.now() - llmStart;
+      console.log(`  [CliProxy LLM Stream] Connected in ${llmMs}ms`);
+      return result;
+    },
+  };
+
+  return wrapLanguageModel({
+    model,
+    middleware: forceNonStream
+      ? [simulateStreamingMiddleware(), middleware]
+      : middleware,
+  });
+}
+
+// ── Director-specific model ──────────────────────────────────────────────────
+// The Director agent generates strategic JSON — fast, cheap, no streaming needed.
+// Defaults to Volcengine (DeepSeek) when available, regardless of global AI_PROVIDER.
+// Override with DIRECTOR_PROVIDER env var.
+
+export function getDirectorModel() {
+  const directorProvider = process.env.DIRECTOR_PROVIDER
+    ?? (process.env.VOLCENGINE_API_KEY ? 'volcengine' : undefined);
+
+  if (directorProvider === 'volcengine') {
+    return getVolcengineModel('chat'); // 'chat' role avoids simulateStreamingMiddleware
+  }
+  return getModel('storyteller');
+}
+
+export function getDirectorModelInfo(): { provider: string; modelId: string } {
+  const directorProvider = process.env.DIRECTOR_PROVIDER
+    ?? (process.env.VOLCENGINE_API_KEY ? 'volcengine' : undefined);
+
+  if (directorProvider === 'volcengine') {
+    return { provider: 'volcengine', modelId: modelOverrides.get('chat') ?? VOLCENGINE_MODEL_IDS.chat };
+  }
+  return getActiveModelInfo('storyteller');
 }
 
 // LanguageModelV3Prompt is an array of { role: 'system'|'user'|'assistant'|'tool', content: [...] }

@@ -31,7 +31,7 @@ interface FrameData {
   narration?: string;
   narrationBeats?: string[];
   dialogue?: { speaker: string; text: string };
-  conversationLines?: { speaker: string; text: string; isNarrator?: boolean }[];
+  conversationLines?: ({ speaker: string; text: string } | { narrator: string })[];
   effects: string[];
   perLineEffects?: string[];
   audio?: string;
@@ -126,9 +126,9 @@ async function run() {
               const conv = frame.conversation ?? inp?.conversation;
               const dlg = frame.dialogue ?? inp?.dialogue;
               if (Array.isArray(conv) && conv.length > 0) {
-                fd.conversationLines = conv.map((l: any) => ({ speaker: l.speaker || '', text: l.text, isNarrator: l.isNarrator }));
+                fd.conversationLines = conv.map((l: any) => 'narrator' in l ? { narrator: l.narrator } : { speaker: l.speaker || '', text: l.text });
                 // Set dialogue to first non-narrator speaker for backward compat in reports
-                const firstSpeaker = conv.find((l: any) => !l.isNarrator);
+                const firstSpeaker = conv.find((l: any) => !('narrator' in l));
                 if (firstSpeaker) fd.dialogue = { speaker: firstSpeaker.speaker || 'unknown', text: firstSpeaker.text };
                 const lineEffects = conv.filter((l: any) => l.effect).map((l: any) => l.effect.type);
                 fd.perLineEffects = [...(fd.perLineEffects ?? []), ...lineEffects];
@@ -173,10 +173,10 @@ async function run() {
               }
               if (fd.conversationLines && fd.conversationLines.length > 0) {
                 fd.conversationLines.forEach((line) => {
-                  if (line.isNarrator) {
-                    console.log(`│      📝 ${line.text.substring(0, 250)}${line.text.length > 250 ? '...' : ''}`);
+                  if ('narrator' in line) {
+                    console.log(`│      📝 ${line.narrator.substring(0, 250)}${line.narrator.length > 250 ? '...' : ''}`);
                   } else {
-                    console.log(`│      🗣️  ${line.speaker}: "${line.text.substring(0, 250)}${line.text.length > 250 ? '...' : ''}"`);
+                    console.log(`│      🗣️  ${(line as any).speaker}: "${(line as any).text.substring(0, 250)}${(line as any).text.length > 250 ? '...' : ''}"`);
                   }
                 });
               } else if (fd.dialogue) {
