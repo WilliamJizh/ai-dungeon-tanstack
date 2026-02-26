@@ -17,6 +17,12 @@ public/generated/
 # PDFs
 /*.pdf
 
+# Playtest / autoplay logs
+playtest_*.log
+playtest_*.md
+playtest_*.json
+autoplay_output*.log
+
 # IDE / tool configs
 .agent/
 .agents/
